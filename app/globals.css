@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-light: rgba(0, 0, 0, 0.14);
+}
+
+@theme {
+  --color-bg: #F5EEE6;
+  --color-s1: #FFFFFF;
+  --color-s2: #ECE6DC;
+  --color-s3: #E2D9CE;
+  --color-navy: #1C2B38;
+  --color-navy2: #2A3D52;
+  --color-gold: #B8924A;
+  --color-gold2: #9A7A38;
+  --color-green: #2DAA5E;
+  --color-danger: #D44040;
+  --color-blue: #88ABBE;
+  --color-text: #1C2B38;
+  --color-muted: #7A8E9B;
+  --color-muted2: #5A6E7B;
+  --font-bebas: var(--font-bebas-neue), sans-serif;
+  --font-outfit: var(--font-outfit-var), sans-serif;
+}
+
+body {
+  background-color: #F5EEE6;
+  color: #1C2B38;
+  font-family: var(--font-outfit-var), sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(136, 171, 190, 0.15) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+.score-inp {
+  width: 44px;
+  height: 44px;
+  text-align: center;
+  background: #ECE6DC;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  color: #1C2B38;
+  font-size: 18px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: var(--font-outfit-var), sans-serif;
+}
+.score-inp:focus {
+  border-color: #B8924A;
+}
+
+@keyframes letterBounce {
+  0%, 50%, 100% { transform: translateY(0); color: #B8924A; }
+  25% { transform: translateY(-14px); color: #1C2B38; }
+}
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
