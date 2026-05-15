@@ -77,6 +77,30 @@ export interface Database {
         }
         Relationships: []
       }
+      stage_winners: {
+        Row: {
+          stage_key: string
+          user_id: string
+          name: string
+          points: number
+          declared_at: string
+        }
+        Insert: {
+          stage_key: string
+          user_id: string
+          name: string
+          points: number
+          declared_at?: string
+        }
+        Update: {
+          stage_key?: string
+          user_id?: string
+          name?: string
+          points?: number
+          declared_at?: string
+        }
+        Relationships: []
+      }
       picks: {
         Row: {
           id: string

@@ -2,25 +2,6 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { headers } from 'next/headers'
-
-export async function sendMagicLink(email: string, name: string) {
-  const supabase = await createClient()
-  const headersList = await headers()
-  const host = headersList.get('x-forwarded-host') ?? headersList.get('host') ?? 'localhost:3000'
-  const proto = headersList.get('x-forwarded-proto') ?? 'http'
-  const origin = `${proto}://${host}`
-
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback`,
-      data: { name },
-    },
-  })
-
-  return { error: error?.message }
-}
 
 export async function savePicks(
   picks: { matchId: string; homeScore: number; awayScore: number }[]

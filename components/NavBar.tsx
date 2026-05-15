@@ -7,6 +7,7 @@ const baseItems = [
   { href: '/dashboard', label: 'Home' },
   { href: '/partidos', label: 'Matches' },
   { href: '/tabla', label: 'Leaderboard' },
+  { href: '/how-to-play', label: 'How to Play' },
 ]
 
 export default function NavBar({ isAdmin }: { isAdmin: boolean }) {

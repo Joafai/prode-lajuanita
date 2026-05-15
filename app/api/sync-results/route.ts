@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
+import type { Phase } from '@/lib/matches-data'
+import { notifyPhaseOpen, notifyPhaseClose, notifyTournamentEnd, notifyWinner } from '@/lib/notify-actions'
 
 const TOURNAMENT_START = new Date('2026-06-11T00:00:00Z')
 const TOURNAMENT_END   = new Date('2026-07-20T23:59:59Z')
@@ -125,7 +127,9 @@ async function runSync() {
   }
 
   // ── STEP 3: Auto-activate phases 48h before first match ─────────────────────
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
   const inactivePhases = dbPhases?.filter((p) => !p.is_active) ?? []
+  const activatedPhases: Phase[] = []
   for (const phase of inactivePhases) {
     const phaseMatches = dbMatches?.filter((m) => m.phase === phase.phase && m.match_date) ?? []
     if (!phaseMatches.length) continue
@@ -149,10 +153,72 @@ async function runSync() {
         .update({ is_active: true, activated_at: now.toISOString() })
         .eq('phase', phase.phase)
       phasesActivated++
+      activatedPhases.push(phase.phase as Phase)
     }
   }
 
-  return { teamsUpdated, scoresUpdated, phasesActivated, error: null }
+  // Fire phase_open blast for every phase activated above. Wrapped in try/catch
+  // so an SMTP outage doesn't roll back the activation — admin can re-send
+  // manually from the panel if needed.
+  let phaseOpenEmailsSent = 0
+  for (const phase of activatedPhases) {
+    try {
+      await notifyPhaseOpen(supabase, phase, appUrl)
+      phaseOpenEmailsSent++
+    } catch {
+      // swallow — phase stays active, manual re-send remains available
+    }
+  }
+
+  // ── STEP 4: Auto-close phases whose matches are all finished ────────────────
+  // For each active phase, if every match has a score we close it: send the
+  // phase_close email (with prize-winner block for grupos / dieciseisavos) and
+  // flip is_active=false. The flag is the dedup gate — once flipped, this
+  // branch is skipped on future runs. When the closed phase is `final`, also
+  // fires the tournament_end + winner emails before exiting.
+  let phasesClosed = 0
+  let tournamentEnded = false
+  let winnerNotified = false
+
+  // Re-fetch matches and active_phases — they may have changed in earlier steps
+  const [{ data: matchesAfter }, { data: phasesAfter }] = await Promise.all([
+    supabase.from('matches').select('*'),
+    supabase.from('active_phases').select('*'),
+  ])
+
+  const activeNow = (phasesAfter ?? []).filter((p) => p.is_active)
+  for (const phaseRow of activeNow) {
+    const phase = phaseRow.phase as Phase
+    const phaseMatches = (matchesAfter ?? []).filter((m) => m.phase === phase)
+    if (!phaseMatches.length) continue
+    const allFinished = phaseMatches.every((m) => m.home_score !== null && m.away_score !== null)
+    if (!allFinished) continue
+
+    try {
+      await notifyPhaseClose(supabase, phase, appUrl)
+      phasesClosed++
+      if (phase === 'final') {
+        await notifyTournamentEnd(supabase, appUrl)
+        tournamentEnded = true
+        await notifyWinner(supabase, appUrl)
+        winnerNotified = true
+      }
+    } catch {
+      // If SMTP fails, leave is_active=true so the next cron run retries.
+      // notifyPhaseClose flips is_active only after a successful batch.
+    }
+  }
+
+  return {
+    teamsUpdated,
+    scoresUpdated,
+    phasesActivated,
+    phaseOpenEmailsSent,
+    phasesClosed,
+    tournamentEnded,
+    winnerNotified,
+    error: null,
+  }
 }
 
 // POST — admin-triggered from the panel

@@ -1,10 +1,25 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { PHASE_LABELS } from '@/lib/matches-data'
+import { PHASE_LABELS, type Phase } from '@/lib/matches-data'
+import {
+  notifyPhaseOpen,
+  notifyPhaseClose,
+  notifyTournamentEnd,
+  notifyWinner,
+} from '@/lib/notify-actions'
+import type { EmailType } from '@/lib/email-templates'
+
+export const runtime = 'nodejs'
+
+type NotifyType = Extract<EmailType, 'phase_open' | 'phase_close' | 'tournament_end' | 'winner'>
+
+interface NotifyRequest {
+  type: NotifyType
+  phase?: Phase
+}
 
 export async function POST(request: Request) {
-  const { phase } = await request.json()
-  if (!phase) return NextResponse.json({ error: 'Missing phase' }, { status: 400 })
+  const body = (await request.json()) as Partial<NotifyRequest> & { phase?: string }
 
   const supabase = await createClient()
   const {
@@ -17,53 +32,39 @@ export async function POST(request: Request) {
     .select('is_admin')
     .eq('id', user.id)
     .single()
-
   if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const resendKey = process.env.RESEND_API_KEY
-  const resendFrom = process.env.RESEND_FROM
-  if (!resendKey || !resendFrom) {
-    return NextResponse.json({ error: 'Resend not configured' }, { status: 400 })
-  }
-
-  const { data: profiles } = await supabase.from('profiles').select('name, email')
-  if (!profiles?.length) return NextResponse.json({ sent: 0 })
-
-  const phaseLabel = PHASE_LABELS[phase as keyof typeof PHASE_LABELS] ?? phase
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  const type = body.type ?? (body.phase ? 'phase_open' : null)
+  if (!type) return NextResponse.json({ error: 'Missing type' }, { status: 400 })
 
-  const results = await Promise.allSettled(
-    profiles.map((p) =>
-      fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: resendFrom,
-          to: p.email,
-          subject: `🏆 ${phaseLabel} habilitada — Prode La Juanita`,
-          html: `
-            <div style="font-family:sans-serif;max-width:500px;margin:0 auto;background:#0e1220;color:#e8edf8;padding:2rem;border-radius:12px;">
-              <h1 style="color:#f0c040;font-size:1.8rem;margin-bottom:.5rem">¡Nueva fase habilitada!</h1>
-              <p style="color:#8898bb">Hola <strong style="color:#e8edf8">${p.name}</strong>,</p>
-              <p style="color:#8898bb;margin-top:12px">
-                La <strong style="color:#e8edf8">${phaseLabel}</strong> ya está disponible en el Prode La Juanita.
-                Entrá a cargar tus pronósticos antes de que cierren.
-              </p>
-              <a href="${appUrl}/partidos" style="display:inline-block;margin-top:1.5rem;padding:12px 24px;background:#f0c040;color:#000;font-weight:700;border-radius:8px;text-decoration:none;">
-                Cargar pronósticos →
-              </a>
-              <hr style="border-color:rgba(255,255,255,.1);margin:1.5rem 0">
-              <p style="font-size:12px;color:#6b7a9a">Prode La Juanita · Mundial 2026</p>
-            </div>
-          `,
-        }),
-      })
-    )
-  )
+  try {
+    if (type === 'phase_open' || type === 'phase_close') {
+      const phase = body.phase as Phase | undefined
+      if (!phase || !PHASE_LABELS[phase]) {
+        return NextResponse.json({ error: 'Invalid phase' }, { status: 400 })
+      }
+      const result =
+        type === 'phase_open'
+          ? await notifyPhaseOpen(supabase, phase, appUrl)
+          : await notifyPhaseClose(supabase, phase, appUrl)
+      return NextResponse.json(result)
+    }
 
-  const sent = results.filter((r) => r.status === 'fulfilled').length
-  return NextResponse.json({ sent, total: profiles.length })
+    if (type === 'tournament_end') {
+      return NextResponse.json(await notifyTournamentEnd(supabase, appUrl))
+    }
+
+    if (type === 'winner') {
+      return NextResponse.json(await notifyWinner(supabase, appUrl))
+    }
+
+    return NextResponse.json({ error: 'Unknown type' }, { status: 400 })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    if (msg === 'SMTP_NOT_CONFIGURED') {
+      return NextResponse.json({ error: 'SMTP not configured' }, { status: 400 })
+    }
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }

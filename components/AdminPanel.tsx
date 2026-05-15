@@ -58,15 +58,38 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
     })
   }
 
-  function handleNotify(phase: string) {
+  async function postNotify(payload: Record<string, unknown>): Promise<{ sent?: number; failed?: number; error?: string; winner?: string }> {
+    const res = await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  }
+
+  function handleNotifyPhase(phase: string, kind: 'phase_open' | 'phase_close') {
     startTransition(async () => {
-      const res = await fetch('/api/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phase }),
-      })
-      const data = await res.json()
-      showToast(data.error ? 'Error: ' + data.error : `📧 ${data.sent} emails sent`)
+      const data = await postNotify({ type: kind, phase })
+      if (data.error) showToast('Error: ' + data.error)
+      else showToast(`📧 ${data.sent} emails sent · ${kind === 'phase_open' ? 'open' : 'close'}`)
+    })
+  }
+
+  function handleNotifyTournamentEnd() {
+    if (!confirm('Send end-of-tournament email to ALL users with their leaderboard position?')) return
+    startTransition(async () => {
+      const data = await postNotify({ type: 'tournament_end' })
+      if (data.error) showToast('Error: ' + data.error)
+      else showToast(`🏆 ${data.sent} emails sent · winner: ${data.winner ?? '—'}`)
+    })
+  }
+
+  function handleNotifyWinner() {
+    if (!confirm('Send special winner email to the top of the leaderboard?')) return
+    startTransition(async () => {
+      const data = await postNotify({ type: 'winner' })
+      if (data.error) showToast('Error: ' + data.error)
+      else showToast(`👑 Winner notified: ${data.winner ?? '—'}`)
     })
   }
 
@@ -153,17 +176,59 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
               </button>
               {phases[phase] && (
                 <button
-                  onClick={() => handleNotify(phase)}
+                  onClick={() => handleNotifyPhase(phase, 'phase_open')}
                   disabled={isPending}
                   style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
                   className="px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 hover:border-gold hover:text-gold"
                 >
-                  📧 Notify
+                  📧 Open
                 </button>
               )}
+              <button
+                onClick={() => handleNotifyPhase(phase, 'phase_close')}
+                disabled={isPending}
+                style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 hover:border-gold hover:text-gold"
+              >
+                🔒 Close
+              </button>
             </div>
           </div>
         ))}
+      </div>
+
+      <h2 style={{ borderBottom: '1px solid rgba(0,0,0,0.08)' }} className="font-bebas text-2xl tracking-widest text-gold mb-4 pb-2">
+        Tournament Wrap-up
+      </h2>
+      <div style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }} className="rounded-xl p-4 mb-8 space-y-3">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-sm font-semibold text-text">End-of-tournament recap</p>
+            <p className="text-xs text-muted mt-0.5">Sends every user their final position + the winner&apos;s name.</p>
+          </div>
+          <button
+            onClick={handleNotifyTournamentEnd}
+            disabled={isPending}
+            style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
+            className="px-4 py-2 rounded-full text-xs font-semibold transition-all disabled:opacity-50 hover:border-gold hover:text-gold whitespace-nowrap"
+          >
+            🏆 Notify tournament end
+          </button>
+        </div>
+        <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} className="pt-3 flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-sm font-semibold text-text">Winner-only email</p>
+            <p className="text-xs text-muted mt-0.5">Single special email to whoever sits at #1 on the leaderboard.</p>
+          </div>
+          <button
+            onClick={handleNotifyWinner}
+            disabled={isPending}
+            style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
+            className="px-4 py-2 rounded-full text-xs font-semibold transition-all disabled:opacity-50 hover:border-gold hover:text-gold whitespace-nowrap"
+          >
+            👑 Notify winner
+          </button>
+        </div>
       </div>
 
       {PHASE_ORDER.map((phase) => {

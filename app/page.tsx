@@ -1,5 +1,6 @@
 import AuthForm from '@/components/AuthForm'
 import PageDecor from '@/components/PageDecor'
+import IntroOverlay from '@/components/IntroOverlay'
 
 export default function HomePage() {
   return (
@@ -9,6 +10,7 @@ export default function HomePage() {
         { src: '/juanita-flag.png',   side: 'right', vertical: 'bottom', rotate:  10, size: 420, offset: 60 },
       ]} />
       <AuthForm />
+      <IntroOverlay />
     </div>
   )
 }
