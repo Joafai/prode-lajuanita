@@ -1,11 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { PHASE_ORDER, PHASE_LABELS, type Phase } from '@/lib/matches-data'
 import { sendEmailBatch, type EmailMessage } from '@/lib/email-send'
+import { denseRank } from '@/lib/ranking'
 import {
   phaseOpenEmail,
   phaseCloseEmail,
   tournamentEndEmail,
   winnerEmail,
+  type PodiumEntry,
 } from '@/lib/email-templates'
 
 export const PRIZE_PHASES: Phase[] = ['grupos']
@@ -33,7 +35,10 @@ export async function notifyPhaseOpen(
   phase: Phase,
   appUrl: string
 ): Promise<NotifyResult> {
-  const { data: profiles } = await supabase.from('profiles').select('name, email')
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('name, email')
+    .not('confirmed_at', 'is', null)
   if (!profiles?.length) return { sent: 0, failed: 0, total: 0 }
 
   const items: EmailMessage[] = profiles.map((p) => {
@@ -59,44 +64,77 @@ export async function notifyPhaseClose(
   const nextPhase = phaseIdx >= 0 && phaseIdx < PHASE_ORDER.length - 1 ? PHASE_ORDER[phaseIdx + 1] : null
   const nextPhaseLabel = nextPhase ? PHASE_LABELS[nextPhase] : null
 
-  let leader: { name: string; points: number } | null = null
-  let leaderUserId: string | null = null
+  // Build the podium (positions 1-3 with ties) for prize phases. Empates en la
+  // misma posición → ambos entran en el podio compartiendo la misma `position`.
+  let podium: (PodiumEntry & { user_id: string; email: string })[] = []
   if (PRIZE_PHASES.includes(phase)) {
     const { data: leaderboard } = await supabase.rpc('get_leaderboard')
-    if (leaderboard?.length) {
-      leader = { name: leaderboard[0].name, points: leaderboard[0].total_pts }
-      leaderUserId = leaderboard[0].user_id
+    const rows = (leaderboard ?? []) as LeaderboardRow[]
+    if (rows.length) {
+      const ranks = denseRank(rows.map((r) => ({ total_pts: Number(r.total_pts) })))
+      podium = rows
+        .map((row, i) => ({ row, rank: ranks[i] }))
+        .filter((x): x is { row: LeaderboardRow; rank: number } => x.rank !== null && x.rank <= 3)
+        .map((x) => ({
+          name: x.row.name,
+          points: Number(x.row.total_pts),
+          position: x.rank as 1 | 2 | 3,
+          user_id: x.row.user_id,
+          email: x.row.email,
+        }))
     }
   }
 
-  const { data: profiles } = await supabase.from('profiles').select('name, email')
-  let result: NotifyResult = { sent: 0, failed: 0, total: 0, leader: leader?.name ?? null }
+  // Lookup: email → podium position (used to render the personalized prize-claim
+  // variant for top-3 recipients).
+  const positionByEmail = new Map<string, 1 | 2 | 3>()
+  for (const p of podium) positionByEmail.set(p.email, p.position)
+
+  const { data: profiles, error: profilesErr } = await supabase
+    .from('profiles')
+    .select('name, email')
+    .not('confirmed_at', 'is', null)
+  if (profilesErr) console.error('[notifyPhaseClose] profiles query error:', profilesErr)
+
+  const podiumForEmail = podium.map(({ name, points, position }) => ({ name, points, position }))
+  const leaderName = podium[0]?.name ?? null
+  const stageKey: 'grupos' | null = phase === 'grupos' ? 'grupos' : null
+  let result: NotifyResult = { sent: 0, failed: 0, total: 0, leader: leaderName }
   if (profiles?.length) {
     const items: EmailMessage[] = profiles.map((p) => {
-      const tpl = phaseCloseEmail({ appUrl, recipientName: p.name, phaseLabel, nextPhaseLabel, leader })
+      const recipientPosition = positionByEmail.get(p.email) ?? null
+      const tpl = phaseCloseEmail({
+        appUrl,
+        recipientName: p.name,
+        phaseLabel,
+        nextPhaseLabel,
+        podium: podiumForEmail.length ? podiumForEmail : null,
+        recipientPosition,
+        stageKey: recipientPosition ? stageKey : null,
+      })
       return { to: p.email, subject: tpl.subject, html: tpl.html }
     })
     const batch = await sendEmailBatch(items)
-    result = { ...batch, leader: leader?.name ?? null }
+    result = { ...batch, leader: leaderName }
   }
 
   await supabase.from('active_phases').update({ is_active: false }).eq('phase', phase)
 
-  // Lock in the prize-phase winner snapshot (only for prize phases). Upsert so
-  // a manual re-trigger of close doesn't accidentally insert a duplicate row.
-  if (leader && leaderUserId && PRIZE_PHASES.includes(phase)) {
-    await supabase
-      .from('stage_winners')
-      .upsert(
-        {
-          stage_key: phase,
-          user_id: leaderUserId,
-          name: leader.name,
-          points: leader.points,
-          declared_at: new Date().toISOString(),
-        },
-        { onConflict: 'stage_key' }
-      )
+  // Lock in the prize-phase podium snapshot (only for prize phases). Wipe any
+  // previous rows for this stage_key first, then insert the current top 3 so a
+  // re-trigger picks up any leaderboard changes.
+  if (podium.length && PRIZE_PHASES.includes(phase)) {
+    await supabase.from('stage_winners').delete().eq('stage_key', phase)
+    await supabase.from('stage_winners').insert(
+      podium.map((p) => ({
+        stage_key: phase,
+        user_id: p.user_id,
+        name: p.name,
+        points: p.points,
+        position: p.position,
+        declared_at: new Date().toISOString(),
+      }))
+    )
   }
 
   return result
@@ -128,14 +166,23 @@ export async function notifyTournamentEnd(
       { onConflict: 'stage_key' }
     )
 
-  const items: EmailMessage[] = (leaderboard as LeaderboardRow[]).map((row, i) => {
+  // Compute dense rank so top-3 (with possible ties) get the personalized
+  // prize-claim variant instead of the generic "your finish" recap.
+  const rows = leaderboard as LeaderboardRow[]
+  const ranks = denseRank(rows.map((r) => ({ total_pts: Number(r.total_pts) })))
+
+  const items: EmailMessage[] = rows.map((row, i) => {
+    const rank = ranks[i]
+    const recipientPodiumPosition: 1 | 2 | 3 | null =
+      rank === 1 || rank === 2 || rank === 3 ? rank : null
     const tpl = tournamentEndEmail({
       appUrl,
       recipientName: row.name,
       position: i + 1,
       totalParticipants: total,
-      points: row.total_pts,
+      points: Number(row.total_pts),
       winnerName: winner.name,
+      recipientPodiumPosition,
     })
     return { to: row.email, subject: tpl.subject, html: tpl.html }
   })

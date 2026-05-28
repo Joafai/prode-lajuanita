@@ -47,84 +47,90 @@ function normalize(name: string): string {
 
 async function runSync() {
   const now = new Date()
-  if (now < TOURNAMENT_START || now > TOURNAMENT_END) {
+  const simulationMode = process.env.SIMULATION_MODE === 'true'
+
+  if (!simulationMode && (now < TOURNAMENT_START || now > TOURNAMENT_END)) {
     return { skipped: true, reason: 'Outside tournament window', updated: 0 }
   }
 
-  const apiKey = process.env.FOOTBALL_DATA_API_KEY
-  if (!apiKey) return { error: 'FOOTBALL_DATA_API_KEY not configured', updated: 0 }
-
-  // Fetch all WC matches from the API
-  const res = await fetch(
-    'https://api.football-data.org/v4/competitions/WC/matches',
-    { headers: { 'X-Auth-Token': apiKey }, next: { revalidate: 0 } }
-  )
-  if (!res.ok) return { error: `API error: ${res.status} ${res.statusText}`, updated: 0 }
-
-  const data = await res.json()
-  const apiMatches: {
-    stage: string
-    status: string
-    utcDate: string
-    homeTeam: { name: string }
-    awayTeam: { name: string }
-    score: { fullTime: { home: number | null; away: number | null } }
-  }[] = data.matches ?? []
-
   const supabase = createAdminClient()
-  const [{ data: dbMatches }, { data: dbPhases }] = await Promise.all([
-    supabase.from('matches').select('*'),
-    supabase.from('active_phases').select('*'),
-  ])
-
+  const apiKey = process.env.FOOTBALL_DATA_API_KEY
   let teamsUpdated = 0
   let scoresUpdated = 0
   let phasesActivated = 0
 
-  // ── STEP 1: Update TBD team names for knockout matches ──────────────────────
-  for (const apiMatch of apiMatches) {
-    const phase = STAGE_TO_PHASE[apiMatch.stage]
-    if (!phase) continue
-    if (!apiMatch.homeTeam?.name || !apiMatch.awayTeam?.name) continue
+  // In SIMULATION_MODE we skip the football-data.org sync entirely — scores
+  // and team names come from manual admin input via /api/simulate.
+  if (!simulationMode) {
+    if (!apiKey) return { error: 'FOOTBALL_DATA_API_KEY not configured', updated: 0 }
 
-    const homeTeam = normalize(apiMatch.homeTeam.name)
-    const awayTeam = normalize(apiMatch.awayTeam.name)
-    const apiDate = new Date(apiMatch.utcDate)
-
-    // Find our DB match by phase + date (within 2h window)
-    const dbMatch = dbMatches?.find((m) => {
-      if (m.phase !== phase || !m.match_date) return false
-      const diff = Math.abs(new Date(m.match_date).getTime() - apiDate.getTime())
-      return diff < 2 * 60 * 60 * 1000
-    })
-
-    if (dbMatch && (dbMatch.home_team.startsWith('TBD') || dbMatch.away_team.startsWith('TBD'))) {
-      await supabase.from('matches').update({ home_team: homeTeam, away_team: awayTeam }).eq('id', dbMatch.id)
-      dbMatch.home_team = homeTeam
-      dbMatch.away_team = awayTeam
-      teamsUpdated++
-    }
-  }
-
-  // ── STEP 2: Update scores for finished matches ───────────────────────────────
-  for (const apiMatch of apiMatches) {
-    if (apiMatch.status !== 'FINISHED') continue
-    if (apiMatch.score?.fullTime?.home === null || apiMatch.score?.fullTime?.away === null) continue
-
-    const homeTeam = normalize(apiMatch.homeTeam?.name ?? '')
-    const awayTeam = normalize(apiMatch.awayTeam?.name ?? '')
-    const homeScore = apiMatch.score.fullTime.home!
-    const awayScore = apiMatch.score.fullTime.away!
-
-    const dbMatch = dbMatches?.find(
-      (m) => m.home_team === homeTeam && m.away_team === awayTeam && m.home_score === null
+    // Fetch all WC matches from the API
+    const res = await fetch(
+      'https://api.football-data.org/v4/competitions/WC/matches',
+      { headers: { 'X-Auth-Token': apiKey }, next: { revalidate: 0 } }
     )
+    if (!res.ok) return { error: `API error: ${res.status} ${res.statusText}`, updated: 0 }
 
-    if (dbMatch) {
-      await supabase.from('matches').update({ home_score: homeScore, away_score: awayScore }).eq('id', dbMatch.id)
-      scoresUpdated++
+    const data = await res.json()
+    const apiMatches: {
+      stage: string
+      status: string
+      utcDate: string
+      homeTeam: { name: string }
+      awayTeam: { name: string }
+      score: { fullTime: { home: number | null; away: number | null } }
+    }[] = data.matches ?? []
+
+    const { data: dbMatches } = await supabase.from('matches').select('*')
+
+    // ── STEP 1: Update TBD team names for knockout matches ────────────────────
+    for (const apiMatch of apiMatches) {
+      const phase = STAGE_TO_PHASE[apiMatch.stage]
+      if (!phase) continue
+      if (!apiMatch.homeTeam?.name || !apiMatch.awayTeam?.name) continue
+
+      const homeTeam = normalize(apiMatch.homeTeam.name)
+      const awayTeam = normalize(apiMatch.awayTeam.name)
+      const apiDate = new Date(apiMatch.utcDate)
+
+      // Find our DB match by phase + date (within 2h window)
+      const dbMatch = dbMatches?.find((m) => {
+        if (m.phase !== phase || !m.match_date) return false
+        const diff = Math.abs(new Date(m.match_date).getTime() - apiDate.getTime())
+        return diff < 2 * 60 * 60 * 1000
+      })
+
+      if (dbMatch && (dbMatch.home_team.startsWith('TBD') || dbMatch.away_team.startsWith('TBD'))) {
+        await supabase.from('matches').update({ home_team: homeTeam, away_team: awayTeam }).eq('id', dbMatch.id)
+        dbMatch.home_team = homeTeam
+        dbMatch.away_team = awayTeam
+        teamsUpdated++
+      }
+    }
+
+    // ── STEP 2: Update scores for finished matches ─────────────────────────────
+    for (const apiMatch of apiMatches) {
+      if (apiMatch.status !== 'FINISHED') continue
+      if (apiMatch.score?.fullTime?.home === null || apiMatch.score?.fullTime?.away === null) continue
+
+      const homeTeam = normalize(apiMatch.homeTeam?.name ?? '')
+      const awayTeam = normalize(apiMatch.awayTeam?.name ?? '')
+      const homeScore = apiMatch.score.fullTime.home!
+      const awayScore = apiMatch.score.fullTime.away!
+
+      const dbMatch = dbMatches?.find(
+        (m) => m.home_team === homeTeam && m.away_team === awayTeam && m.home_score === null
+      )
+
+      if (dbMatch) {
+        await supabase.from('matches').update({ home_score: homeScore, away_score: awayScore }).eq('id', dbMatch.id)
+        scoresUpdated++
+      }
     }
   }
+
+  const { data: dbMatches } = await supabase.from('matches').select('*')
+  const { data: dbPhases } = await supabase.from('active_phases').select('*')
 
   // ── STEP 3: Auto-activate phases 48h before first match ─────────────────────
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -147,7 +153,9 @@ async function runSync() {
 
     const hoursUntil = (earliest.getTime() - now.getTime()) / (60 * 60 * 1000)
 
-    if (hoursUntil <= 48 && hoursUntil > 0) {
+    // In simulation mode, activate any phase that's not active yet (and has no
+    // TBDs). In real mode, only activate if first kickoff is within 48h.
+    if (simulationMode || (hoursUntil <= 48 && hoursUntil > 0)) {
       await supabase
         .from('active_phases')
         .update({ is_active: true, activated_at: now.toISOString() })

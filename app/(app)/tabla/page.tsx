@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import PageDecor from '@/components/PageDecor'
+import { denseRank } from '@/lib/ranking'
 
 export default async function TablaPage() {
   const supabase = await createClient()
@@ -9,17 +10,22 @@ export default async function TablaPage() {
 
   const [{ data: leaderboard }, { data: stageWinners }] = await Promise.all([
     supabase.rpc('get_leaderboard'),
-    supabase.from('stage_winners').select('stage_key, name, points'),
+    supabase.from('stage_winners').select('stage_key, name, points, position').order('position'),
   ])
   const ranking = leaderboard ?? []
-  const medals = ['🥇', '🥈', '🥉']
+  const ranks = denseRank(ranking.map((r) => ({ total_pts: Number(r.total_pts) })))
+  const medals: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
 
-  const winnersByKey = new Map(
-    (stageWinners ?? []).map((w) => [w.stage_key, { name: w.name, points: Number(w.points) }])
-  )
-  const groupWinner = winnersByKey.get('grupos') ?? null
-  const poolChampion = winnersByKey.get('pool_champion') ?? null
-  const hasWinners = groupWinner || poolChampion
+  // Group stage_winners rows by stage_key, preserving the (position 1..3) order
+  const podiumByStage = new Map<string, { name: string; points: number; position: number }[]>()
+  for (const w of stageWinners ?? []) {
+    const arr = podiumByStage.get(w.stage_key) ?? []
+    arr.push({ name: w.name, points: Number(w.points), position: Number(w.position ?? 1) })
+    podiumByStage.set(w.stage_key, arr)
+  }
+  const groupPodium = podiumByStage.get('grupos') ?? null
+  const poolChampion = podiumByStage.get('pool_champion')?.[0] ?? null
+  const hasWinners = (groupPodium && groupPodium.length) || poolChampion
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 relative z-10">
@@ -35,35 +41,59 @@ export default async function TablaPage() {
 
       {hasWinners && (
         <div className="grid sm:grid-cols-2 gap-3 mb-6">
-          {[
-            { label: 'Group Stage winner', data: groupWinner, fallback: 'Decided when the group stage ends' },
-            { label: 'Pool champion', data: poolChampion, fallback: 'Decided when the tournament ends' },
-          ].map(({ label, data, fallback }) => (
-            <div
-              key={label}
-              style={{
-                background: data ? '#FFFFFF' : '#F5EEE6',
-                border: data ? '1px solid rgba(184,146,74,0.35)' : '1px dashed rgba(0,0,0,0.1)',
-                boxShadow: data ? '0 2px 12px rgba(184,146,74,0.12)' : undefined,
-              }}
-              className="rounded-xl p-4"
-            >
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
-                {label}
-              </div>
-              {data ? (
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🏆</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-text text-base truncate">{data.name}</div>
-                    <div className="text-xs text-muted2">{data.points} pts at stage close</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-xs text-muted leading-relaxed pt-0.5">{fallback}</div>
-              )}
+          {/* Group Stage podium */}
+          <div
+            style={{
+              background: groupPodium && groupPodium.length ? '#FFFFFF' : '#F5EEE6',
+              border: groupPodium && groupPodium.length ? '1px solid rgba(184,146,74,0.35)' : '1px dashed rgba(0,0,0,0.1)',
+              boxShadow: groupPodium && groupPodium.length ? '0 2px 12px rgba(184,146,74,0.12)' : undefined,
+            }}
+            className="rounded-xl p-4"
+          >
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
+              Group Stage podium
             </div>
-          ))}
+            {groupPodium && groupPodium.length ? (
+              <div className="space-y-1.5">
+                {groupPodium.map((w, i) => (
+                  <div key={`${w.position}-${i}`} className="flex items-center gap-2.5">
+                    <span className="text-lg w-6 text-center">{medals[w.position] ?? `#${w.position}`}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-text text-sm truncate">{w.name}</div>
+                    </div>
+                    <div className="text-xs text-muted2 whitespace-nowrap">{w.points} pts</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-muted leading-relaxed pt-0.5">Decided when the group stage ends</div>
+            )}
+          </div>
+
+          {/* Pool champion (single) */}
+          <div
+            style={{
+              background: poolChampion ? '#FFFFFF' : '#F5EEE6',
+              border: poolChampion ? '1px solid rgba(184,146,74,0.35)' : '1px dashed rgba(0,0,0,0.1)',
+              boxShadow: poolChampion ? '0 2px 12px rgba(184,146,74,0.12)' : undefined,
+            }}
+            className="rounded-xl p-4"
+          >
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+              Pool champion
+            </div>
+            {poolChampion ? (
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🏆</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-text text-base truncate">{poolChampion.name}</div>
+                  <div className="text-xs text-muted2">{poolChampion.points} pts at tournament end</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-muted leading-relaxed pt-0.5">Decided when the tournament ends</div>
+            )}
+          </div>
         </div>
       )}
 
@@ -90,7 +120,9 @@ export default async function TablaPage() {
             <tbody>
               {ranking.map((r, i) => {
                 const isMe = r.user_id === user.id
-                const posColors = ['text-gold', 'text-muted2', 'text-muted']
+                const rank = ranks[i]
+                const posColor =
+                  rank === 1 ? 'text-gold' : rank === 2 ? 'text-muted2' : rank === 3 ? 'text-muted' : 'text-muted'
                 return (
                   <tr
                     key={r.user_id}
@@ -99,8 +131,8 @@ export default async function TablaPage() {
                       background: isMe ? 'rgba(184,146,74,0.05)' : undefined,
                     }}
                   >
-                    <td className={`px-4 py-4 font-bebas text-2xl ${posColors[i] ?? 'text-muted'}`}>
-                      {medals[i] ?? i + 1}
+                    <td className={`px-4 py-4 font-bebas text-2xl ${posColor}`}>
+                      {rank === null ? <span className="text-muted">—</span> : (medals[rank] ?? rank)}
                     </td>
                     <td className="px-4 py-4">
                       <div className="font-semibold text-sm text-text">

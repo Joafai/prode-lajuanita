@@ -35,5 +35,10 @@ export async function sendEmailBatch(items: EmailMessage[]): Promise<{ sent: num
   )
   const sent = results.filter((r) => r.status === 'fulfilled').length
   const failed = results.length - sent
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`[sendEmailBatch] FAILED to=${items[i].to}:`, r.reason)
+    }
+  })
   return { sent, failed, total: results.length }
 }

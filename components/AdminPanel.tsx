@@ -93,6 +93,42 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
     })
   }
 
+  async function postSimulate(payload: Record<string, unknown>): Promise<{ updated?: number; cleared?: number; scoresCleared?: number; skipped?: number; error?: string }> {
+    const res = await fetch('/api/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return res.json()
+  }
+
+  function handleSimFill(phase: string, mode: 'random' | 'argentina-wins') {
+    if (!confirm(`Fill ALL ${phase} matches with ${mode} scores? Existing scores in TBD-free matches will be overwritten.`)) return
+    startTransition(async () => {
+      const data = await postSimulate({ action: 'fill-phase', phase, mode })
+      if (data.error) showToast('Error: ' + data.error)
+      else showToast(`🎲 ${data.updated} matches filled (${data.skipped ?? 0} TBD skipped)`)
+    })
+  }
+
+  function handleSimClear(phase: string) {
+    if (!confirm(`Clear all scores in ${phase}?`)) return
+    startTransition(async () => {
+      const data = await postSimulate({ action: 'clear-phase', phase })
+      if (data.error) showToast('Error: ' + data.error)
+      else showToast(`🧹 ${data.cleared} scores cleared in ${phase}`)
+    })
+  }
+
+  function handleSimReset() {
+    if (!confirm('RESET EVERYTHING: clear all match scores, all prize-winner snapshots, and deactivate all phases. This is destructive but only really makes sense in simulation. Proceed?')) return
+    startTransition(async () => {
+      const data = await postSimulate({ action: 'reset-all' })
+      if (data.error) showToast('Error: ' + data.error)
+      else showToast(`♻️ Reset complete (${data.scoresCleared} scores)`)
+    })
+  }
+
   function handleSaveResult(match: Match) {
     const inp = resultInputs[match.id]
     if (!inp || inp.home === '' || inp.away === '') { showToast('Enter both scores'); return }
@@ -230,6 +266,65 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
           </button>
         </div>
       </div>
+
+      {process.env.NEXT_PUBLIC_SIMULATION_MODE === 'true' && (
+        <>
+          <h2 style={{ borderBottom: '1px solid rgba(184,146,74,0.4)' }} className="font-bebas text-2xl tracking-widest text-gold mb-4 pb-2 flex items-center gap-2">
+            🧪 Simulation
+            <span className="text-[10px] uppercase tracking-wider font-sans font-normal text-muted2 normal-case">test mode — disable in production</span>
+          </h2>
+          <div style={{ background: '#FFFFFF', border: '1px solid rgba(184,146,74,0.3)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }} className="rounded-xl p-4 mb-8 space-y-3">
+            <p className="text-xs text-muted leading-relaxed">
+              Bypasses the tournament-window guard so you can run the full lifecycle locally. Fill phase scores → trigger the cron with <code className="bg-s2 px-1 rounded">🔄 Sync Results</code> → auto-close should fire emails + lock in stage winners.
+            </p>
+            {PHASE_ORDER.map((phase) => (
+              <div key={phase} style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} className="pt-3 flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-text">{PHASE_LABELS[phase as keyof typeof PHASE_LABELS]}</span>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleSimFill(phase, 'random')}
+                    disabled={isPending}
+                    style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 hover:border-gold hover:text-gold"
+                  >
+                    🎲 Fill random
+                  </button>
+                  <button
+                    onClick={() => handleSimFill(phase, 'argentina-wins')}
+                    disabled={isPending}
+                    style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 hover:border-gold hover:text-gold"
+                  >
+                    🇦🇷 Argentina wins
+                  </button>
+                  <button
+                    onClick={() => handleSimClear(phase)}
+                    disabled={isPending}
+                    style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 hover:border-danger hover:text-danger"
+                  >
+                    🧹 Clear
+                  </button>
+                </div>
+              </div>
+            ))}
+            <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} className="pt-3 flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <p className="text-sm font-semibold text-text">Reset everything</p>
+                <p className="text-xs text-muted mt-0.5">Wipes scores, prize-winner snapshots and deactivates every phase.</p>
+              </div>
+              <button
+                onClick={handleSimReset}
+                disabled={isPending}
+                style={{ background: 'rgba(212,64,64,0.08)', border: '1px solid rgba(212,64,64,0.3)', color: '#D44040' }}
+                className="px-4 py-2 rounded-full text-xs font-semibold transition-all disabled:opacity-50 whitespace-nowrap"
+              >
+                ♻️ Reset all
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {PHASE_ORDER.map((phase) => {
         const phaseMatches = matches.filter((m) => m.phase === phase)

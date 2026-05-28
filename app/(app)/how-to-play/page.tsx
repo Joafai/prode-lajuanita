@@ -92,13 +92,22 @@ export default function HowToPlayPage() {
       {/* ── Tiebreakers ─────────────────────────────────────────────────────── */}
       <Section title="Tiebreakers between participants">
         <p className="text-sm text-text leading-relaxed mb-3">
-          If two or more participants end a stage tied on total points, the leaderboard breaks the tie in this order:
+          Position depends <strong>only on total points</strong>. Submitting more predictions doesn&apos;t move you up — only correct picks do.
         </p>
-        <ol className="list-decimal pl-5 space-y-1.5 text-sm text-text">
-          <li>Most <strong>exact scores</strong> predicted.</li>
-          <li>Most <strong>correct outcomes</strong> (winner or draw with wrong score).</li>
-          <li>If still tied after both criteria, the prize is split equally between the tied participants.</li>
-        </ol>
+        <p className="text-sm text-text leading-relaxed mb-3">
+          If two or more participants are tied on total points, <strong>they share the same position</strong>. Example:
+        </p>
+        <pre className="text-xs sm:text-sm font-mono bg-s2 rounded-lg px-4 py-3 mb-3 text-text leading-relaxed">{`1   Carlos      20 pts
+1   Jaqueline   20 pts
+2   Miriam      19 pts
+3   Tony        18 pts
+3   Rachel      18 pts`}</pre>
+        <p className="text-sm text-text leading-relaxed">
+          If a tie is at a prize position when a stage closes, the prize is <strong>split equally</strong> between the tied participants.
+        </p>
+        <p className="text-xs text-muted2 leading-relaxed mt-3">
+          Until anyone has scored any points, the leaderboard is shown alphabetically by name with no position numbers.
+        </p>
       </Section>
 
       {/* ── Legal ───────────────────────────────────────────────────────────── */}

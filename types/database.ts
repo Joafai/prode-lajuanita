@@ -83,6 +83,7 @@ export interface Database {
           user_id: string
           name: string
           points: number
+          position: number
           declared_at: string
         }
         Insert: {
@@ -90,6 +91,7 @@ export interface Database {
           user_id: string
           name: string
           points: number
+          position: number
           declared_at?: string
         }
         Update: {
@@ -97,6 +99,7 @@ export interface Database {
           user_id?: string
           name?: string
           points?: number
+          position?: number
           declared_at?: string
         }
         Relationships: []
