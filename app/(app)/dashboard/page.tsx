@@ -109,7 +109,7 @@ export default async function DashboardPage() {
         ].map(({ src, alt, width, height }) => (
           <div
             key={src}
-            style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
+            style={{ background: '#FFFFFF', border: '2px solid #88ABBE', boxShadow: '0 2px 12px rgba(136,171,190,0.18)' }}
             className="rounded-xl overflow-hidden"
           >
             <Image

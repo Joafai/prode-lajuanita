@@ -66,16 +66,26 @@ export default function HowToPlayPage() {
       {/* ── Phases & prizes ─────────────────────────────────────────────────── */}
       <Section title="Phases & prizes">
         <p className="text-sm text-text leading-relaxed mb-3">
-          The pool runs over two stages and has <strong>two prizes</strong> in total.
+          The pool runs over two stages and has <strong>six prizes</strong> in total.
         </p>
-        <ul className="space-y-3 text-sm mb-4">
+        <ul className="space-y-4 text-sm mb-4">
           <li>
-            <p className="font-semibold text-text">🏆 Group Stage prize</p>
-            <p className="text-muted2 text-xs leading-relaxed">Awarded to whoever leads the leaderboard the moment the group stage ends.</p>
+            <p className="font-semibold text-text">🏆 Group Stage Prizes</p>
+            <p className="text-muted2 text-xs leading-relaxed mb-2">Awarded to the Top 3 participants on the leaderboard when the group stage ends.</p>
+            <ul className="space-y-0.5 text-xs text-text pl-1">
+              <li>🥇 1st Place</li>
+              <li>🥈 2nd Place</li>
+              <li>🥉 3rd Place</li>
+            </ul>
           </li>
           <li>
-            <p className="font-semibold text-text">🏆 Knockout Stage prize (Pool champion)</p>
-            <p className="text-muted2 text-xs leading-relaxed">Awarded to whoever leads the leaderboard at the end of the knockout stage — i.e. after the final match of the tournament.</p>
+            <p className="font-semibold text-text">🏆 Knockout Stage Prizes (Pool Champions)</p>
+            <p className="text-muted2 text-xs leading-relaxed mb-2">Awarded to the Top 3 participants on the leaderboard at the end of the knockout stage — i.e. after the final match of the tournament.</p>
+            <ul className="space-y-0.5 text-xs text-text pl-1">
+              <li>🥇 1st Place</li>
+              <li>🥈 2nd Place</li>
+              <li>🥉 3rd Place</li>
+            </ul>
           </li>
         </ul>
         <div
@@ -84,7 +94,7 @@ export default function HowToPlayPage() {
         >
           <p className="text-xs font-semibold text-gold uppercase tracking-wider mb-1">Points carry over</p>
           <p className="text-xs text-text leading-relaxed">
-            Your points <strong>do not reset</strong> when the group stage ends. Everything you earned in the groups keeps adding to your total throughout the knockouts. The Group Stage prize winner is decided at that snapshot, but their points stay on the board and still count toward the Pool champion.
+            Your points <strong>do not reset</strong> when the group stage ends. Everything you earned in the groups keeps adding to your total throughout the knockouts. The Group Stage prize winners are decided at that snapshot, but their points stay on the board and still count toward the Pool champion.
           </p>
         </div>
       </Section>
@@ -103,7 +113,7 @@ export default function HowToPlayPage() {
 3   Tony        18 pts
 3   Rachel      18 pts`}</pre>
         <p className="text-sm text-text leading-relaxed">
-          If a tie is at a prize position when a stage closes, the prize is <strong>split equally</strong> between the tied participants.
+          If a tie is at a prize position when a stage closes, the tiebreaker is whoever predicted the <strong>most exact scores</strong>. If the tie still persists, the winner is determined through a <strong>random draw</strong> among the tied participants.
         </p>
         <p className="text-xs text-muted2 leading-relaxed mt-3">
           Until anyone has scored any points, the leaderboard is shown alphabetically by name with no position numbers.
@@ -139,7 +149,7 @@ export default function HowToPlayPage() {
           </li>
           <li className="flex gap-3">
             <span className="text-gold font-bold">•</span>
-            <span>In the event of a <strong>tie in points between participants</strong>, tiebreakers are resolved according to the criteria stated above (most exact scores, then most correct outcomes). If the tie persists, the prize is split equally among the tied participants.</span>
+            <span>In the event of a <strong>tie in points between participants</strong>, the tiebreaker will be whoever predicted the <strong>most exact scores</strong>. If the tie still persists, the winner will be determined through a <strong>random draw</strong> among the tied participants.</span>
           </li>
         </ul>
       </div>
