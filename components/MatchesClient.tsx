@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { savePicks } from '@/lib/actions'
-import { PHASE_ORDER, PHASE_LABELS, getFlag, isMatchLocked, translateGroupName, type Phase } from '@/lib/matches-data'
+import { PHASE_ORDER, PHASE_LABELS, getFlag, isMatchLocked, translateGroupName, formatMatchDateMiami, type Phase } from '@/lib/matches-data'
 import { calcMatchPts } from '@/lib/scoring'
 import type { Database } from '@/types/database'
 
@@ -18,7 +18,12 @@ interface Props {
 
 type ScoreMap = Record<string, { home: string; away: string }>
 
-export default function PartidosClient({ initialMatches, initialPicks, activePhases }: Props) {
+// When true, individual match locks (12h-pre-kickoff guard + "has real result")
+// are bypassed so test users can edit picks freely while a phase is active.
+// Only enabled when NEXT_PUBLIC_SIMULATION_MODE=true — production stays strict.
+const SIMULATION_MODE = process.env.NEXT_PUBLIC_SIMULATION_MODE === 'true'
+
+export default function MatchesClient({ initialMatches, initialPicks, activePhases }: Props) {
   const phaseMap = Object.fromEntries(activePhases.map((p) => [p.phase, p.is_active]))
   const firstActive = PHASE_ORDER.find((p) => phaseMap[p]) ?? 'grupos'
 
@@ -53,7 +58,13 @@ export default function PartidosClient({ initialMatches, initialPicks, activePha
     const toSave = phaseMatches
       .filter((m) => {
         const s = scores[m.id]
-        return s && s.home !== '' && s.away !== '' && !isMatchLocked(m.match_date) && m.home_score === null
+        if (!s || s.home === '' || s.away === '') return false
+        // Match with a real result is always locked — pick can't change after the match.
+        if (m.home_score !== null) return false
+        // 1h-pre-kickoff lock only applies in production; in SIMULATION_MODE we don't
+        // have real kickoff times to test against.
+        if (!SIMULATION_MODE && isMatchLocked(m.match_date)) return false
+        return true
       })
       .map((m) => ({
         matchId: m.id,
@@ -89,7 +100,7 @@ export default function PartidosClient({ initialMatches, initialPicks, activePha
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 pb-28 relative z-10">
       {/* Phase tabs */}
-      <div className="flex gap-1.5 flex-wrap mb-6">
+      <div className="flex gap-1.5 overflow-x-auto mb-6 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-1 scrollbar-thin">
         {PHASE_ORDER.map((phase) => {
           const active = phase === currentPhase
           const locked = !phaseMap[phase]
@@ -105,7 +116,7 @@ export default function PartidosClient({ initialMatches, initialPicks, activePha
                   ? { background: '#B8924A', color: '#FFFFFF', border: '1px solid #B8924A' }
                   : { background: 'none', border: '1px solid rgba(0,0,0,0.12)', color: locked ? '#C8C0B8' : '#7A8E9B' }
               }
-              className="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
+              className="shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
             >
               {PHASE_LABELS[phase as Phase]}
             </button>
@@ -184,7 +195,10 @@ function MatchCard({
 }) {
   const hasResult = match.home_score !== null && match.away_score !== null
   const hasPick = pick !== undefined
-  const locked = hasResult || isMatchLocked(match.match_date)
+  // A match is locked when:
+  //   - it already has a real result (always, regardless of mode), or
+  //   - in production, it's within the 1h-pre-kickoff window.
+  const locked = hasResult || (!SIMULATION_MODE && isMatchLocked(match.match_date))
 
   let cardStyle: React.CSSProperties = { background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)' }
   let ptsEl: React.ReactNode = null
@@ -215,23 +229,38 @@ function MatchCard({
       </div>
 
       <div className="flex flex-col items-center gap-1.5">
-        {hasResult ? (
-          <>
-            <span className="text-xl font-bold text-text">{match.home_score} - {match.away_score}</span>
-            <span className="text-[11px] text-muted">your pick: {hasPick ? `${pick.home_score}-${pick.away_score}` : '—'}</span>
-            {ptsEl}
-          </>
-        ) : locked && !isTBD ? (
-          <span className="text-sm text-muted">Locked</span>
-        ) : isTBD ? (
+        {isTBD ? (
           <span className="text-xs text-muted">TBD</span>
         ) : (
           <>
             <div className="flex items-center gap-1.5">
-              <input type="number" className="score-inp" min={0} max={20} value={scores?.home ?? ''} onChange={(e) => onScore(match.id, 'home', e.target.value)} placeholder="-" />
+              <input
+                type="number"
+                className="score-inp disabled:opacity-60 disabled:cursor-not-allowed"
+                min={0}
+                max={20}
+                value={scores?.home ?? ''}
+                onChange={(e) => onScore(match.id, 'home', e.target.value)}
+                placeholder="-"
+                disabled={locked}
+              />
               <span className="text-muted font-bold text-lg">:</span>
-              <input type="number" className="score-inp" min={0} max={20} value={scores?.away ?? ''} onChange={(e) => onScore(match.id, 'away', e.target.value)} placeholder="-" />
+              <input
+                type="number"
+                className="score-inp disabled:opacity-60 disabled:cursor-not-allowed"
+                min={0}
+                max={20}
+                value={scores?.away ?? ''}
+                onChange={(e) => onScore(match.id, 'away', e.target.value)}
+                placeholder="-"
+                disabled={locked}
+              />
             </div>
+            {hasResult ? (
+              <span className="text-base font-bold text-blue">outcome: {match.home_score}-{match.away_score}</span>
+            ) : match.match_date ? (
+              <span className="text-xs text-muted">{formatMatchDateMiami(match.match_date)}</span>
+            ) : null}
             {ptsEl}
           </>
         )}

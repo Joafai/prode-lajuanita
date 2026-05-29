@@ -23,9 +23,9 @@ export async function savePicks(
     { onConflict: 'user_id,match_id' }
   )
 
-  revalidatePath('/partidos')
+  revalidatePath('/matches')
   revalidatePath('/dashboard')
-  revalidatePath('/tabla')
+  revalidatePath('/leaderboard')
 
   return { error: error?.message }
 }
@@ -51,8 +51,8 @@ export async function saveResult(matchId: string, homeScore: number, awayScore: 
     .eq('id', matchId)
 
   revalidatePath('/admin')
-  revalidatePath('/tabla')
-  revalidatePath('/partidos')
+  revalidatePath('/leaderboard')
+  revalidatePath('/matches')
 
   return { error: error?.message }
 }
@@ -78,7 +78,7 @@ export async function updateMatchTeams(matchId: string, homeTeam: string, awayTe
     .eq('id', matchId)
 
   revalidatePath('/admin')
-  revalidatePath('/partidos')
+  revalidatePath('/matches')
 
   return { error: error?.message }
 }
@@ -107,7 +107,7 @@ export async function togglePhase(phase: string, isActive: boolean) {
     .eq('phase', phase)
 
   revalidatePath('/admin')
-  revalidatePath('/partidos')
+  revalidatePath('/matches')
 
   return { error: error?.message }
 }

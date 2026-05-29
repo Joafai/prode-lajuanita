@@ -91,7 +91,7 @@ export default async function DashboardPage() {
       </div>
 
       <Link
-        href="/partidos"
+        href="/matches"
         className="inline-block py-3 px-8 bg-navy text-white font-bold rounded-lg hover:bg-navy2 transition-colors text-sm"
       >
         Fill in predictions →

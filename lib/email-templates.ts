@@ -133,7 +133,7 @@ export function welcomeEmail(ctx: BaseCtx): EmailPayload {
             <li>Climb the leaderboard to win the pool.</li>
           </ol>
         </div>
-        ${button(`${ctx.appUrl}/partidos`, 'Submit my predictions →')}
+        ${button(`${ctx.appUrl}/matches`, 'Submit my predictions →')}
       `
     ),
   }
@@ -150,7 +150,7 @@ export function phaseOpenEmail(ctx: PhaseCtx): EmailPayload {
         ${heading(`${phase} is now open`)}
         ${paragraph(`Hi ${name}, predictions for the <strong style="color:#1C2B38;">${phase}</strong> are open. Submit your picks before they lock.`)}
         ${paragraph(`Remember: each match locks 12 hours before kickoff.`)}
-        ${button(`${ctx.appUrl}/partidos`, 'Submit predictions →')}
+        ${button(`${ctx.appUrl}/matches`, 'Submit predictions →')}
       `
     ),
   }
@@ -265,8 +265,8 @@ export function phaseCloseEmail(ctx: PhaseCtx): EmailPayload {
           ${keepPlayingHtml}
           ${
             next
-              ? button(`${ctx.appUrl}/partidos`, `Open ${next} →`)
-              : button(`${ctx.appUrl}/tabla`, 'View leaderboard →')
+              ? button(`${ctx.appUrl}/matches`, `Open ${next} →`)
+              : button(`${ctx.appUrl}/leaderboard`, 'View leaderboard →')
           }
         `
       ),
@@ -290,8 +290,8 @@ export function phaseCloseEmail(ctx: PhaseCtx): EmailPayload {
         ${keepPlayingHtml}
         ${
           next
-            ? button(`${ctx.appUrl}/partidos`, `Open ${next} →`)
-            : button(`${ctx.appUrl}/tabla`, 'View leaderboard →')
+            ? button(`${ctx.appUrl}/matches`, `Open ${next} →`)
+            : button(`${ctx.appUrl}/leaderboard`, 'View leaderboard →')
         }
       `
     ),
@@ -320,7 +320,7 @@ export function tournamentEndEmail(ctx: TournamentEndCtx): EmailPayload {
             <p style="margin:6px 0 0 0;font-size:22px;color:#1C2B38;font-weight:700;">${ordinal} out of ${ctx.totalParticipants}</p>
             <p style="margin:4px 0 0 0;font-size:13px;color:#5A6E7B;">${ctx.points} points</p>
           </div>
-          ${button(`${ctx.appUrl}/tabla`, 'View full leaderboard →')}
+          ${button(`${ctx.appUrl}/leaderboard`, 'View full leaderboard →')}
         `
       ),
     }
@@ -343,7 +343,7 @@ export function tournamentEndEmail(ctx: TournamentEndCtx): EmailPayload {
           <p style="margin:6px 0 0 0;font-size:22px;color:#1C2B38;font-weight:700;">${ordinal} out of ${ctx.totalParticipants}</p>
           <p style="margin:4px 0 0 0;font-size:13px;color:#5A6E7B;">${ctx.points} points</p>
         </div>
-        ${button(`${ctx.appUrl}/tabla`, 'View full leaderboard →')}
+        ${button(`${ctx.appUrl}/leaderboard`, 'View full leaderboard →')}
       `
     ),
   }
@@ -364,7 +364,7 @@ export function winnerEmail(ctx: WinnerCtx): EmailPayload {
         </div>
         ${paragraph(`Congratulations — you topped the leaderboard. The rest of us are jealous.`)}
         ${paragraph(`Keep an eye on your inbox: we'll be in touch about your prize.`)}
-        ${button(`${ctx.appUrl}/tabla`, 'See the final leaderboard →')}
+        ${button(`${ctx.appUrl}/leaderboard`, 'See the final leaderboard →')}
       `
     ),
   }

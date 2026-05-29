@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { togglePhase, saveResult, updateMatchTeams, makeAdmin } from '@/lib/actions'
 import { PHASE_ORDER, PHASE_LABELS, getFlag } from '@/lib/matches-data'
 import type { Database } from '@/types/database'
@@ -20,6 +21,7 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
   const [pwError, setPwError] = useState('')
   const [toast, setToast] = useState('')
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
   const [phases, setPhases] = useState(Object.fromEntries(activePhases.map((p) => [p.phase, p.is_active])))
   const [resultInputs, setResultInputs] = useState<Record<string, { home: string; away: string }>>({})
   const [teamInputs, setTeamInputs] = useState<Record<string, { home: string; away: string }>>({})
@@ -107,7 +109,10 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
     startTransition(async () => {
       const data = await postSimulate({ action: 'fill-phase', phase, mode })
       if (data.error) showToast('Error: ' + data.error)
-      else showToast(`🎲 ${data.updated} matches filled (${data.skipped ?? 0} TBD skipped)`)
+      else {
+        showToast(`🎲 ${data.updated} matches filled (${data.skipped ?? 0} TBD skipped)`)
+        router.refresh()
+      }
     })
   }
 
@@ -116,7 +121,10 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
     startTransition(async () => {
       const data = await postSimulate({ action: 'clear-phase', phase })
       if (data.error) showToast('Error: ' + data.error)
-      else showToast(`🧹 ${data.cleared} scores cleared in ${phase}`)
+      else {
+        showToast(`🧹 ${data.cleared} scores cleared in ${phase}`)
+        router.refresh()
+      }
     })
   }
 
@@ -125,7 +133,12 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
     startTransition(async () => {
       const data = await postSimulate({ action: 'reset-all' })
       if (data.error) showToast('Error: ' + data.error)
-      else showToast(`♻️ Reset complete (${data.scoresCleared} scores)`)
+      else {
+        showToast(`♻️ Reset complete (${data.scoresCleared} scores)`)
+        // Reset the in-memory phases state too so the UI flips Active → Disabled without needing a manual refresh
+        setPhases((prev) => Object.fromEntries(Object.keys(prev).map((k) => [k, false])))
+        router.refresh()
+      }
     })
   }
 

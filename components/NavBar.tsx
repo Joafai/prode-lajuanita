@@ -5,8 +5,8 @@ import { usePathname } from 'next/navigation'
 
 const baseItems = [
   { href: '/dashboard', label: 'Home' },
-  { href: '/partidos', label: 'Matches' },
-  { href: '/tabla', label: 'Leaderboard' },
+  { href: '/matches', label: 'Matches' },
+  { href: '/leaderboard', label: 'Leaderboard' },
   { href: '/how-to-play', label: 'How to Play' },
 ]
 

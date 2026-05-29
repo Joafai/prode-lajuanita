@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import PageDecor from '@/components/PageDecor'
 import { denseRank } from '@/lib/ranking'
 
-export default async function TablaPage() {
+export default async function LeaderboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/')
@@ -110,9 +110,16 @@ export default async function TablaPage() {
           <table className="w-full border-collapse">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.08)', background: '#F5EEE6' }}>
-                {['#', 'Player', 'Pts', 'Exact', 'Winner', 'Picks'].map((h) => (
-                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted">
-                    {h}
+                {[
+                  { label: '#', align: 'center' },
+                  { label: 'Player', align: 'left' },
+                  { label: 'Pts', align: 'center' },
+                  { label: 'Exact', align: 'center' },
+                  { label: 'Outcome', align: 'center' },
+                  { label: 'Picks', align: 'center' },
+                ].map(({ label, align }) => (
+                  <th key={label} className={`text-${align} px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted`}>
+                    {label}
                   </th>
                 ))}
               </tr>
@@ -131,20 +138,20 @@ export default async function TablaPage() {
                       background: isMe ? 'rgba(184,146,74,0.05)' : undefined,
                     }}
                   >
-                    <td className={`px-4 py-4 font-bebas text-2xl ${posColor}`}>
+                    <td className={`px-4 py-4 text-center font-bebas text-2xl ${posColor}`}>
                       {rank === null ? <span className="text-muted">—</span> : (medals[rank] ?? rank)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-4 py-4 text-left">
                       <div className="font-semibold text-sm text-text">
                         {r.name}
                         {isMe && <span className="ml-1.5 text-gold text-xs font-normal">(you)</span>}
                       </div>
                       <div className="text-xs text-muted">{r.email}</div>
                     </td>
-                    <td className="px-4 py-4 font-bebas text-3xl text-gold">{r.total_pts}</td>
-                    <td className="px-4 py-4 font-semibold text-green text-sm">{r.exact_count}</td>
-                    <td className="px-4 py-4 font-semibold text-gold text-sm">{r.winner_count}</td>
-                    <td className="px-4 py-4 text-muted text-sm">{r.picks_count}</td>
+                    <td className="px-4 py-4 text-center font-bebas text-3xl text-gold">{r.total_pts}</td>
+                    <td className="px-4 py-4 text-center font-semibold text-green text-sm">{r.exact_count}</td>
+                    <td className="px-4 py-4 text-center font-semibold text-gold text-sm">{r.winner_count}</td>
+                    <td className="px-4 py-4 text-center text-muted text-sm">{r.picks_count}</td>
                   </tr>
                 )
               })}

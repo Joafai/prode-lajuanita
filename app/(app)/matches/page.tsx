@@ -1,9 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import PartidosClient from '@/components/PartidosClient'
+import MatchesClient from '@/components/MatchesClient'
 import PageDecor from '@/components/PageDecor'
 
-export default async function PartidosPage() {
+export default async function MatchesPage() {
   const supabase = await createClient()
   const {
     data: { user },
@@ -22,7 +22,7 @@ export default async function PartidosPage() {
         { src: '/juanita-empanada-scarf.png', side: 'left',  vertical: 'bottom', rotate: -12, size: 420, offset: 60 },
         { src: '/juanita-empanada-flag.png',  side: 'right', vertical: 'bottom', rotate:  12, size: 420, offset: 60 },
       ]} />
-      <PartidosClient
+      <MatchesClient
       initialMatches={matches ?? []}
       initialPicks={picks ?? []}
       activePhases={phases ?? []}

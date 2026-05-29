@@ -93,7 +93,26 @@ export function getFlag(team: string): string {
   return FLAGS[team] ?? '🏳️'
 }
 
+// Picks lock 1 hour before kickoff. Mirror in lib/scoring.ts if you change this.
 export function isMatchLocked(matchDate: string | null | undefined): boolean {
   if (!matchDate) return false
-  return new Date(matchDate).getTime() - Date.now() < 12 * 60 * 60 * 1000
+  return new Date(matchDate).getTime() - Date.now() < 60 * 60 * 1000
+}
+
+// Formats a match date as Miami time (America/New_York). Used in /matches when
+// the match hasn't been played yet so the user knows when to check back.
+export function formatMatchDateMiami(matchDate: string | null | undefined): string | null {
+  if (!matchDate) return null
+  const d = new Date(matchDate)
+  if (isNaN(d.getTime())) return null
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(d)
 }

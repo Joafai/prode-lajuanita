@@ -39,6 +39,7 @@ export async function notifyPhaseOpen(
     .from('profiles')
     .select('name, email')
     .not('confirmed_at', 'is', null)
+    .eq('is_admin', false)
   if (!profiles?.length) return { sent: 0, failed: 0, total: 0 }
 
   const items: EmailMessage[] = profiles.map((p) => {
@@ -94,6 +95,7 @@ export async function notifyPhaseClose(
     .from('profiles')
     .select('name, email')
     .not('confirmed_at', 'is', null)
+    .eq('is_admin', false)
   if (profilesErr) console.error('[notifyPhaseClose] profiles query error:', profilesErr)
 
   const podiumForEmail = podium.map(({ name, points, position }) => ({ name, points, position }))
