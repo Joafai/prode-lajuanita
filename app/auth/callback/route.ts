@@ -21,7 +21,13 @@ function safeNextPath(raw: string | null): string {
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = safeNextPath(searchParams.get('next'))
+  // Supabase tacks `type=recovery` onto the redirect when the link came from a
+  // password-reset email. We prefer it over `next` because Supabase's URL
+  // Configuration / Site URL fallback often eats the `next` param, sending the
+  // user to /dashboard logged-in instead of the reset form.
+  const flowType = searchParams.get('type')
+  const rawNext = flowType === 'recovery' ? '/auth/reset-password' : searchParams.get('next')
+  const next = safeNextPath(rawNext)
   const errDesc = searchParams.get('error_description')
 
   if (errDesc) {
