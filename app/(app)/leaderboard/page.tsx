@@ -8,10 +8,19 @@ export default async function LeaderboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/')
 
-  const [{ data: leaderboard }, { data: stageWinners }] = await Promise.all([
+  const [
+    { data: leaderboard },
+    { data: stageWinners },
+    { count: playedCount },
+  ] = await Promise.all([
     supabase.rpc('get_leaderboard'),
     supabase.from('stage_winners').select('stage_key, name, points, position').order('position'),
+    // Counts matches with a real result. If zero, the tournament hasn't started
+    // scoring yet → we render the "waiting for kickoff" placeholder instead of
+    // an everyone-at-0 table.
+    supabase.from('matches').select('id', { count: 'exact', head: true }).not('home_score', 'is', null),
   ])
+  const tournamentStarted = (playedCount ?? 0) > 0
   const ranking = leaderboard ?? []
   const ranks = denseRank(ranking.map((r) => ({ total_pts: Number(r.total_pts), exact_count: Number(r.exact_count) })))
   const medals: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
@@ -53,7 +62,22 @@ export default async function LeaderboardPage() {
         <span className="flex-1 h-px" style={{ background: 'rgba(0,0,0,0.08)' }} />
       </div>
 
-      {hasWinners && (
+      {!tournamentStarted && (
+        <div
+          style={{ background: '#FFFFFF', border: '1px solid rgba(184,146,74,0.35)', boxShadow: '0 2px 12px rgba(184,146,74,0.12)' }}
+          className="rounded-xl px-6 py-10 text-center"
+        >
+          <div className="text-5xl mb-4">⚽</div>
+          <p className="font-bebas text-2xl tracking-widest text-gold mb-2">
+            The World Cup hasn&apos;t kicked off yet
+          </p>
+          <p className="text-sm text-muted leading-relaxed max-w-md mx-auto">
+            Standings will appear here as soon as the first match is played. In the meantime, lock in your predictions on the <strong className="text-text">Matches</strong> tab.
+          </p>
+        </div>
+      )}
+
+      {tournamentStarted && hasWinners && (
         <div className="grid sm:grid-cols-2 gap-3 mb-6">
           {/* Group Stage podium */}
           <div
@@ -115,12 +139,12 @@ export default async function LeaderboardPage() {
         </div>
       )}
 
-      {ranking.length === 0 ? (
+      {tournamentStarted && ranking.length === 0 ? (
         <div className="text-center py-20 text-muted">
           <div className="text-5xl mb-4">🏆</div>
           <p>No participants yet</p>
         </div>
-      ) : (
+      ) : tournamentStarted ? (
         <div
           style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}
           className="rounded-xl overflow-hidden"
@@ -183,9 +207,9 @@ export default async function LeaderboardPage() {
             </tbody>
           </table>
         </div>
-      )}
+      ) : null}
 
-      {ranking.length > 0 && (
+      {tournamentStarted && ranking.length > 0 && (
         <p className="text-xs text-muted2 text-center mt-4 leading-relaxed">
           Ties on total points are broken by who has more exact-score predictions.
         </p>
