@@ -117,8 +117,17 @@ export default function MatchesClient({ initialMatches, initialPicks, activePhas
       const result = await savePicks(toSave)
       if (result.error) {
         showToast('Error saving: ' + result.error)
+        return
+      }
+      // savePicks may silently drop picks that fail the server-side lock
+      // (phase deactivated mid-save, match already played, kickoff window).
+      // Report both numbers so the user knows some weren't persisted.
+      const saved = result.saved ?? toSave.length
+      const rejected = result.rejected ?? 0
+      if (rejected > 0) {
+        showToast(`✓ ${saved} saved · ${rejected} blocked (locked)`)
       } else {
-        showToast(`✓ ${toSave.length} predictions saved`)
+        showToast(`✓ ${saved} predictions saved`)
       }
     })
   }

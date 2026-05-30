@@ -139,7 +139,12 @@ export async function notifyPhaseClose(
     result = { ...batch, leader: leaderName }
   }
 
-  await supabase.from('active_phases').update({ is_active: false }).eq('phase', phase)
+  // Clear activated_at along with is_active so a re-open via the cron writes
+  // a fresh timestamp instead of carrying the stale one.
+  await supabase
+    .from('active_phases')
+    .update({ is_active: false, activated_at: null })
+    .eq('phase', phase)
 
   // Lock in the prize-phase podium snapshot (only for prize phases). Wipe any
   // previous rows for this stage_key first, then insert the current top 3 so a
@@ -254,19 +259,23 @@ export async function notifyFinalsOpen(
 }
 
 // Combined close for the bundled Finals row: closes both phases in the DB and
-// fires the end-of-tournament recap + winner emails. No phase_close email is
-// sent because there's no next phase to announce — the tournament is over.
+// fires the end-of-tournament recap. No phase_close email is sent because
+// there's no next phase to announce — the tournament is over.
+//
+// notifyWinner is intentionally NOT auto-fired here: the tournamentEndEmail
+// for the #1 user already includes the prize-claim block and a "you finished
+// 1st!" subject, so triggering winnerEmail too would deliver two redundant
+// emails to the same person. Admins can still send winnerEmail manually from
+// the admin panel for a special-occasion blast.
 export async function notifyFinalsClose(
   supabase: SupabaseClient,
   appUrl: string
 ): Promise<NotifyResult> {
   await supabase
     .from('active_phases')
-    .update({ is_active: false })
+    .update({ is_active: false, activated_at: null })
     .in('phase', ['tercero', 'final'])
-  const tournament = await notifyTournamentEnd(supabase, appUrl)
-  await notifyWinner(supabase, appUrl)
-  return tournament
+  return await notifyTournamentEnd(supabase, appUrl)
 }
 
 export async function notifyWinner(

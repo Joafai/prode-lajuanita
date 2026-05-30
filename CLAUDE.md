@@ -73,7 +73,7 @@ Team names were originally Spanish (migration `001`) and migration `003_english_
 
 ### Match-locking convention
 
-`isMatchLocked(matchDate)` in `lib/scoring.ts`/`matches-data.ts` returns true within **12h before kickoff**. The client respects it for input disabling, but the server actions (`savePicks` etc.) do **not** re-check it — RLS only enforces ownership, not timing. If you need a hard server-side lock, add it in the action.
+`isMatchLocked(matchDate)` in `lib/matches-data.ts` returns true within **1h before kickoff**. Both client and server enforce this: the client disables the inputs, and `savePicks` (`lib/actions.ts`) re-validates `active_phases.is_active`, `match.home_score IS NULL`, and the 1h pre-kickoff window before writing. Picks that fail the server check are silently dropped from the upsert and reported back as `rejected` in the action's return value. `SIMULATION_MODE=true` (server env) skips the 1h check so the local E2E flow can still poke picks against historical kickoffs.
 
 ### sync-results cron
 

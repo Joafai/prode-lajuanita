@@ -186,7 +186,6 @@ async function runSync() {
   // fires the tournament_end + winner emails before exiting.
   let phasesClosed = 0
   let tournamentEnded = false
-  let winnerNotified = false
 
   // Re-fetch matches and active_phases — they may have changed in earlier steps
   const [{ data: matchesAfter }, { data: phasesAfter }] = await Promise.all([
@@ -206,10 +205,12 @@ async function runSync() {
       await notifyPhaseClose(supabase, phase, appUrl)
       phasesClosed++
       if (phase === 'final') {
+        // notifyWinner is NOT auto-fired here — tournamentEndEmail already
+        // sends the #1 user a personalized "you finished 1st" email with the
+        // prize-claim block. winnerEmail stays available as a manual admin
+        // blast for special-occasion use.
         await notifyTournamentEnd(supabase, appUrl)
         tournamentEnded = true
-        await notifyWinner(supabase, appUrl)
-        winnerNotified = true
       }
     } catch {
       // If SMTP fails, leave is_active=true so the next cron run retries.
@@ -224,7 +225,6 @@ async function runSync() {
     phaseOpenEmailsSent,
     phasesClosed,
     tournamentEnded,
-    winnerNotified,
     error: null,
   }
 }

@@ -50,11 +50,16 @@ export async function GET(request: Request) {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (user && user.email_confirmed_at && !user.user_metadata?.welcome_sent && user.email) {
+        // Claim the send BEFORE actually sending so a concurrent callback
+        // (e.g. user double-clicks the magic link) sees welcome_sent=true and
+        // skips. The trade-off: if the send itself fails the user never gets
+        // a welcome email and we'd need a manual re-send. That's preferred
+        // over delivering the welcome twice.
+        await supabase.auth.updateUser({ data: { welcome_sent: true } })
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? origin
         const recipientName = (user.user_metadata?.name as string | undefined) ?? user.email.split('@')[0]
         const tpl = welcomeEmail({ appUrl, recipientName })
         await sendEmail({ to: user.email, subject: tpl.subject, html: tpl.html })
-        await supabase.auth.updateUser({ data: { welcome_sent: true } })
       }
     } catch {
       // Don't block sign-in if the welcome email fails — log silently and continue.

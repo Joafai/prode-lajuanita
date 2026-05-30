@@ -164,7 +164,7 @@ export default async function LeaderboardPage() {
                         {r.name}
                         {isMe && <span className="ml-1.5 text-gold text-xs font-normal">(you)</span>}
                       </div>
-                      <div className="text-xs text-muted">{r.email}</div>
+                      {r.email && <div className="text-xs text-muted">{r.email}</div>}
                     </td>
                     <td className="px-4 py-4 text-center font-bebas text-3xl text-gold">{r.total_pts}</td>
                     <td className="px-4 py-4 text-center font-semibold text-green text-sm">

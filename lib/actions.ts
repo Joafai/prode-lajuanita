@@ -24,7 +24,7 @@ export async function savePicks(
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { error: 'No autenticado' }
+  if (!user) return { error: 'Not authenticated' }
 
   if (!Array.isArray(picks) || picks.length === 0) {
     return { error: 'No picks supplied' }
@@ -111,7 +111,7 @@ export async function saveResult(matchId: string, homeScore: number, awayScore: 
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { error: 'No autenticado' }
+  if (!user) return { error: 'Not authenticated' }
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -119,7 +119,7 @@ export async function saveResult(matchId: string, homeScore: number, awayScore: 
     .eq('id', user.id)
     .single()
 
-  if (!profile?.is_admin) return { error: 'No autorizado' }
+  if (!profile?.is_admin) return { error: 'Not authorized' }
 
   // Verify the row exists before update so the admin gets a useful "not found"
   // instead of a silent no-op when matchId is wrong / fabricated.
@@ -155,7 +155,7 @@ export async function updateMatchTeams(matchId: string, homeTeam: string, awayTe
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { error: 'No autenticado' }
+  if (!user) return { error: 'Not authenticated' }
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -163,7 +163,7 @@ export async function updateMatchTeams(matchId: string, homeTeam: string, awayTe
     .eq('id', user.id)
     .single()
 
-  if (!profile?.is_admin) return { error: 'No autorizado' }
+  if (!profile?.is_admin) return { error: 'Not authorized' }
 
   const { data: match } = await supabase
     .from('matches')
@@ -196,7 +196,7 @@ export async function togglePhase(phase: string, isActive: boolean) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { error: 'No autenticado' }
+  if (!user) return { error: 'Not authenticated' }
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -204,7 +204,7 @@ export async function togglePhase(phase: string, isActive: boolean) {
     .eq('id', user.id)
     .single()
 
-  if (!profile?.is_admin) return { error: 'No autorizado' }
+  if (!profile?.is_admin) return { error: 'Not authorized' }
 
   const { error } = await supabase
     .from('active_phases')
@@ -241,7 +241,7 @@ export async function makeAdmin(password: string) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { error: 'No autenticado' }
+  if (!user) return { error: 'Not authenticated' }
 
   // Count recent failures BEFORE checking the password so a guesser can't
   // bypass by varying inputs.
@@ -259,7 +259,7 @@ export async function makeAdmin(password: string) {
     // Record the failure. Best-effort: ignore insert errors so a DB hiccup
     // doesn't leak success/failure timing.
     await supabase.from('admin_login_attempts').insert({ user_id: user.id })
-    return { error: 'Contraseña incorrecta' }
+    return { error: 'Incorrect password' }
   }
 
   // Success — clear prior failed attempts and promote.

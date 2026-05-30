@@ -10,6 +10,7 @@ export interface Database {
           email: string
           is_admin: boolean
           created_at: string
+          confirmed_at: string | null
         }
         Insert: {
           id: string
@@ -17,11 +18,13 @@ export interface Database {
           email: string
           is_admin?: boolean
           created_at?: string
+          confirmed_at?: string | null
         }
         Update: {
           name?: string
           email?: string
           is_admin?: boolean
+          confirmed_at?: string | null
         }
         Relationships: []
       }
