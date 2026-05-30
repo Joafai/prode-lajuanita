@@ -29,7 +29,12 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname
 
-  if (!user && path !== '/' && !path.startsWith('/auth')) {
+  // API routes do their own auth (session-based for admin endpoints, Bearer
+  // CRON_SECRET for the cron). Don't bounce them to `/` — that broke the
+  // Vercel cron entirely because cron requests aren't logged in.
+  const isApi = path.startsWith('/api')
+
+  if (!user && !isApi && path !== '/' && !path.startsWith('/auth')) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)
