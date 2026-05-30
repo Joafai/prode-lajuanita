@@ -27,6 +27,11 @@ interface PhaseCtx extends BaseCtx {
   // description in STAGE_PRIZES. Distinct from phaseLabel which is the
   // display string.
   stageKey?: 'grupos' | 'tournament' | null
+  // Number of OTHER participants tied at the same podium position (i.e. same
+  // total_pts AND same exact_count — the exact-count tiebreaker didn't
+  // resolve it). When > 0 the prize block switches to the "draw pending"
+  // variant: prize is decided by a random draw between the tied participants.
+  recipientSharedCount?: number
 }
 
 interface TournamentEndCtx extends BaseCtx {
@@ -37,6 +42,8 @@ interface TournamentEndCtx extends BaseCtx {
   // If recipient is in top-3, render personalized prize block instead of the
   // generic "your finish" stats.
   recipientPodiumPosition?: 1 | 2 | 3 | null
+  // Same semantics as PhaseCtx.recipientSharedCount.
+  recipientSharedCount?: number
 }
 
 // Prize descriptions per stage and position. Sourced from the prize images on
@@ -112,6 +119,13 @@ function escape(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+// Strip CRLF / control chars from any user-controlled string before it lands
+// in an email Subject header. Without this an attacker could sign up with
+// `Alice\r\nBcc: evil@x.com` and inject extra SMTP headers via the subject.
+function headerSafe(value: string): string {
+  return value.replace(/[\r\n\t\0]+/g, ' ').slice(0, 200)
 }
 
 export function welcomeEmail(ctx: BaseCtx): EmailPayload {
@@ -224,6 +238,38 @@ function keepPlayingBlock(isPodiumWinner: boolean): string {
   `
 }
 
+// Variant of prizeClaimBlock for participants tied at a podium position who
+// couldn't be split by the exact-count tiebreaker. Shows the prize on the
+// line and explains the random draw policy.
+function sharedPrizeBlock(
+  stageKey: 'grupos' | 'tournament',
+  position: 1 | 2 | 3,
+  phaseLabel: string,
+  sharedWithCount: number
+): string {
+  const prize = STAGE_PRIZES[stageKey][position]
+  const medal = position === 1 ? '🥇' : position === 2 ? '🥈' : '🥉'
+  const ordinal = position === 1 ? '1st' : position === 2 ? '2nd' : '3rd'
+  const others =
+    sharedWithCount === 1
+      ? '1 other participant'
+      : `${sharedWithCount} other participants`
+  const otherWord = sharedWithCount === 1 ? 'participant' : 'participants'
+  return `
+    <div style="margin:8px 0 20px 0;padding:24px;background:#FFFFFF;border-radius:14px;border:2px solid #B8924A;text-align:center;">
+      <p style="margin:0;font-size:48px;line-height:1;">${medal}🤝</p>
+      <p style="margin:12px 0 0 0;font-size:12px;color:#B8924A;letter-spacing:2px;text-transform:uppercase;font-weight:700;">${ordinal} place · ${escape(phaseLabel)}</p>
+      <p style="margin:8px 0 0 0;font-size:20px;color:#1C2B38;font-weight:700;line-height:1.3;">Tied with ${others}</p>
+      <p style="margin:12px 0 0 0;font-size:14px;color:#5A6E7B;line-height:1.6;">
+        Same total points <strong style="color:#1C2B38;">and</strong> same exact-score count — the standard tiebreaker didn't resolve it. Per the pool rules, the <strong style="color:#1C2B38;">${ordinal}-place prize</strong> (${escape(prize)}) will be decided by a <strong style="color:#1C2B38;">random draw</strong> between you and the tied ${otherWord}.
+      </p>
+      <p style="margin:10px 0 0 0;font-size:13px;color:#7A8E9B;">
+        We'll reach out once the draw is done.
+      </p>
+    </div>
+  `
+}
+
 function prizeClaimBlock(stageKey: 'grupos' | 'tournament', position: 1 | 2 | 3, phaseLabel: string): string {
   const prize = STAGE_PRIZES[stageKey][position]
   const medal = position === 1 ? '🥇' : position === 2 ? '🥈' : '🥉'
@@ -253,14 +299,27 @@ export function phaseCloseEmail(ctx: PhaseCtx): EmailPayload {
 
   // ── Variant A: recipient is in the top-3 → personalized prize-claim email ──
   if (isPodiumWinner) {
+    const sharedCount = ctx.recipientSharedCount ?? 0
+    const isShared = sharedCount > 0
+    const ordinal = ctx.recipientPosition === 1 ? '1st' : ctx.recipientPosition === 2 ? '2nd' : '3rd'
     return {
-      subject: `${ctx.phaseLabel} is over — you finished ${ctx.recipientPosition === 1 ? '1st' : ctx.recipientPosition === 2 ? '2nd' : '3rd'}! 🏆`,
+      subject: isShared
+        ? `${ctx.phaseLabel} is over — you tied for ${ordinal} · draw pending 🤝`
+        : `${ctx.phaseLabel} is over — you finished ${ordinal}! 🏆`,
       html: shell(
         ctx.appUrl,
         `
-          ${heading(`Congrats, ${name}!`)}
-          ${paragraph(`The <strong style="color:#1C2B38;">${phase}</strong> is over — and you finished in the top 3.`)}
-          ${prizeClaimBlock(ctx.stageKey!, ctx.recipientPosition!, ctx.phaseLabel)}
+          ${heading(isShared ? `Tied at ${ordinal} place, ${name}!` : `Congrats, ${name}!`)}
+          ${paragraph(
+            isShared
+              ? `The <strong style="color:#1C2B38;">${phase}</strong> is over — and you finished tied at ${ordinal} place.`
+              : `The <strong style="color:#1C2B38;">${phase}</strong> is over — and you finished in the top 3.`
+          )}
+          ${
+            isShared
+              ? sharedPrizeBlock(ctx.stageKey!, ctx.recipientPosition!, ctx.phaseLabel, sharedCount)
+              : prizeClaimBlock(ctx.stageKey!, ctx.recipientPosition!, ctx.phaseLabel)
+          }
           ${hasPodium ? podiumBlock(ctx.phaseLabel, ctx.podium!) : ''}
           ${keepPlayingHtml}
           ${
@@ -307,14 +366,27 @@ export function tournamentEndEmail(ctx: TournamentEndCtx): EmailPayload {
 
   // ── Top-3 variant: personalized prize-claim ───────────────────────────────
   if (isPodium) {
+    const sharedCount = ctx.recipientSharedCount ?? 0
+    const isShared = sharedCount > 0
+    const podiumOrdinal = podiumPos === 1 ? '1st' : podiumPos === 2 ? '2nd' : '3rd'
     return {
-      subject: `The pool is over — you finished ${podiumPos === 1 ? '1st' : podiumPos === 2 ? '2nd' : '3rd'}! 🏆`,
+      subject: isShared
+        ? `The pool is over — you tied for ${podiumOrdinal} · draw pending 🤝`
+        : `The pool is over — you finished ${podiumOrdinal}! 🏆`,
       html: shell(
         ctx.appUrl,
         `
-          ${heading(`Congrats, ${name}!`)}
-          ${paragraph(`The FIFA World Cup 2026 is done — and you finished in the top 3 of the predictions pool.`)}
-          ${prizeClaimBlock('tournament', podiumPos!, 'Final Standings')}
+          ${heading(isShared ? `Tied at ${podiumOrdinal} place, ${name}!` : `Congrats, ${name}!`)}
+          ${paragraph(
+            isShared
+              ? `The FIFA World Cup 2026 is done — and you finished tied at ${podiumOrdinal} place in the predictions pool.`
+              : `The FIFA World Cup 2026 is done — and you finished in the top 3 of the predictions pool.`
+          )}
+          ${
+            isShared
+              ? sharedPrizeBlock('tournament', podiumPos!, 'Final Standings', sharedCount)
+              : prizeClaimBlock('tournament', podiumPos!, 'Final Standings')
+          }
           <div style="margin:16px 0;padding:20px;background:#F5EEE6;border-radius:12px;text-align:center;">
             <p style="margin:0;font-size:12px;color:#7A8E9B;letter-spacing:1px;text-transform:uppercase;">Your finish</p>
             <p style="margin:6px 0 0 0;font-size:22px;color:#1C2B38;font-weight:700;">${ordinal} out of ${ctx.totalParticipants}</p>
@@ -328,7 +400,7 @@ export function tournamentEndEmail(ctx: TournamentEndCtx): EmailPayload {
 
   // ── Default recap: non-podium users ───────────────────────────────────────
   return {
-    subject: `Final results · ${winner} wins the pool`,
+    subject: headerSafe(`Final results · ${ctx.winnerName} wins the pool`),
     html: shell(
       ctx.appUrl,
       `

@@ -13,8 +13,22 @@ export default async function LeaderboardPage() {
     supabase.from('stage_winners').select('stage_key, name, points, position').order('position'),
   ])
   const ranking = leaderboard ?? []
-  const ranks = denseRank(ranking.map((r) => ({ total_pts: Number(r.total_pts) })))
+  const ranks = denseRank(ranking.map((r) => ({ total_pts: Number(r.total_pts), exact_count: Number(r.exact_count) })))
   const medals: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' }
+
+  // A row is "in a pts tie" when it shares total_pts with the row above or
+  // below. We use this to flag rows where the exact-count tiebreaker decided
+  // the order (or kept them at a shared position when exacts also match).
+  const tied = ranking.map((r, i) => {
+    const pts = Number(r.total_pts)
+    if (pts === 0) return false
+    const prev = ranking[i - 1]
+    const next = ranking[i + 1]
+    return (
+      (prev && Number(prev.total_pts) === pts) ||
+      (next && Number(next.total_pts) === pts)
+    )
+  })
 
   // Group stage_winners rows by stage_key, preserving the (position 1..3) order
   const podiumByStage = new Map<string, { name: string; points: number; position: number }[]>()
@@ -24,8 +38,8 @@ export default async function LeaderboardPage() {
     podiumByStage.set(w.stage_key, arr)
   }
   const groupPodium = podiumByStage.get('grupos') ?? null
-  const poolChampion = podiumByStage.get('pool_champion')?.[0] ?? null
-  const hasWinners = (groupPodium && groupPodium.length) || poolChampion
+  const poolPodium = podiumByStage.get('pool_champion') ?? null
+  const hasWinners = (groupPodium && groupPodium.length) || (poolPodium && poolPodium.length)
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 relative z-10">
@@ -70,25 +84,29 @@ export default async function LeaderboardPage() {
             )}
           </div>
 
-          {/* Pool champion (single) */}
+          {/* Pool champion podium */}
           <div
             style={{
-              background: poolChampion ? '#FFFFFF' : '#F5EEE6',
-              border: poolChampion ? '1px solid rgba(184,146,74,0.35)' : '1px dashed rgba(0,0,0,0.1)',
-              boxShadow: poolChampion ? '0 2px 12px rgba(184,146,74,0.12)' : undefined,
+              background: poolPodium && poolPodium.length ? '#FFFFFF' : '#F5EEE6',
+              border: poolPodium && poolPodium.length ? '1px solid rgba(184,146,74,0.35)' : '1px dashed rgba(0,0,0,0.1)',
+              boxShadow: poolPodium && poolPodium.length ? '0 2px 12px rgba(184,146,74,0.12)' : undefined,
             }}
             className="rounded-xl p-4"
           >
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-1.5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
               Pool champion
             </div>
-            {poolChampion ? (
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🏆</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-text text-base truncate">{poolChampion.name}</div>
-                  <div className="text-xs text-muted2">{poolChampion.points} pts at tournament end</div>
-                </div>
+            {poolPodium && poolPodium.length ? (
+              <div className="space-y-1.5">
+                {poolPodium.map((w, i) => (
+                  <div key={`${w.position}-${i}`} className="flex items-center gap-2.5">
+                    <span className="text-lg w-6 text-center">{medals[w.position] ?? `#${w.position}`}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-text text-sm truncate">{w.name}</div>
+                    </div>
+                    <div className="text-xs text-muted2 whitespace-nowrap">{w.points} pts</div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="text-xs text-muted leading-relaxed pt-0.5">Decided when the tournament ends</div>
@@ -149,7 +167,14 @@ export default async function LeaderboardPage() {
                       <div className="text-xs text-muted">{r.email}</div>
                     </td>
                     <td className="px-4 py-4 text-center font-bebas text-3xl text-gold">{r.total_pts}</td>
-                    <td className="px-4 py-4 text-center font-semibold text-green text-sm">{r.exact_count}</td>
+                    <td className="px-4 py-4 text-center font-semibold text-green text-sm">
+                      {r.exact_count}
+                      {tied[i] && (
+                        <div className="text-[10px] font-normal text-muted2 mt-0.5 leading-tight">
+                          tiebreaker
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-4 text-center font-semibold text-gold text-sm">{r.winner_count}</td>
                     <td className="px-4 py-4 text-center text-muted text-sm">{r.picks_count}</td>
                   </tr>
@@ -158,6 +183,12 @@ export default async function LeaderboardPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {ranking.length > 0 && (
+        <p className="text-xs text-muted2 text-center mt-4 leading-relaxed">
+          Ties on total points are broken by who has more exact-score predictions.
+        </p>
       )}
     </div>
   )

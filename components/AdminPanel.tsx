@@ -15,6 +15,25 @@ interface Props {
   isAdmin: boolean
 }
 
+// In the Active Stages list, Third Place and Final are shown as a single row
+// "Third Place & Final" because they're predicted together. The DB still
+// tracks them as two separate phases (`tercero`, `final`).
+type RowKey = 'grupos' | 'dieciseisavos' | 'octavos' | 'cuartos' | 'semis' | 'finals'
+const ROW_KEYS: RowKey[] = ['grupos', 'dieciseisavos', 'octavos', 'cuartos', 'semis', 'finals']
+const ROW_LABELS: Record<RowKey, string> = {
+  grupos: 'Group Stage',
+  dieciseisavos: 'Round of 32',
+  octavos: 'Round of 16',
+  cuartos: 'Quarterfinals',
+  semis: 'Semifinals',
+  finals: 'Third Place & Final',
+}
+
+function isRowActive(phaseStates: Record<string, boolean>, row: RowKey): boolean {
+  if (row === 'finals') return !!phaseStates.tercero && !!phaseStates.final
+  return !!phaseStates[row]
+}
+
 export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAdmin }: Props) {
   const [isAdmin, setIsAdmin] = useState(initialIsAdmin)
   const [adminPw, setAdminPw] = useState('')
@@ -37,13 +56,21 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
     })
   }
 
-  function handleToggle(phase: string) {
-    const next = !phases[phase]
+  function handleToggle(row: RowKey) {
+    const next = !isRowActive(phases, row)
     startTransition(async () => {
-      const res = await togglePhase(phase, next)
+      if (row === 'finals') {
+        const [r1, r2] = await Promise.all([togglePhase('tercero', next), togglePhase('final', next)])
+        if (!r1.error && !r2.error) {
+          setPhases((prev) => ({ ...prev, tercero: next, final: next }))
+          showToast(`${ROW_LABELS.finals} ${next ? 'enabled' : 'disabled'}`)
+        }
+        return
+      }
+      const res = await togglePhase(row, next)
       if (!res.error) {
-        setPhases((prev) => ({ ...prev, [phase]: next }))
-        showToast(`${PHASE_LABELS[phase as keyof typeof PHASE_LABELS]} ${next ? 'enabled' : 'disabled'}`)
+        setPhases((prev) => ({ ...prev, [row]: next }))
+        showToast(`${ROW_LABELS[row]} ${next ? 'enabled' : 'disabled'}`)
       }
     })
   }
@@ -70,6 +97,9 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
   }
 
   function handleNotifyPhase(phase: string, kind: 'phase_open' | 'phase_close') {
+    if (phase === 'finals' && kind === 'phase_close') {
+      if (!confirm('Close the Finals? This sends tournament results + the winner email and ends the pool.')) return
+    }
     startTransition(async () => {
       const data = await postNotify({ type: kind, phase })
       if (data.error) showToast('Error: ' + data.error)
@@ -179,9 +209,6 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
               Enter
             </button>
           </form>
-          <p className="text-xs text-muted mt-3">
-            Default: <code style={{ background: '#ECE6DC' }} className="px-1.5 py-0.5 rounded text-text">juanita2026</code>
-          </p>
         </div>
       </div>
     )
@@ -211,39 +238,42 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
         Active Stages
       </h2>
       <div style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }} className="rounded-xl p-4 mb-8">
-        {PHASE_ORDER.map((phase, i) => (
-          <div key={phase} style={i < PHASE_ORDER.length - 1 ? { borderBottom: '1px solid rgba(0,0,0,0.06)' } : {}} className="flex items-center justify-between py-3">
-            <span className="text-sm font-medium text-text">{PHASE_LABELS[phase as keyof typeof PHASE_LABELS]}</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleToggle(phase)}
-                disabled={isPending}
-                style={phases[phase] ? { background: '#2DAA5E', color: '#fff', border: '1px solid #2DAA5E' } : { background: 'none', border: '1px solid rgba(0,0,0,0.15)', color: '#7A8E9B' }}
-                className="px-4 py-1.5 rounded-full text-sm font-semibold transition-all disabled:opacity-50"
-              >
-                {phases[phase] ? '✓ Active' : 'Disabled'}
-              </button>
-              {phases[phase] && (
+        {ROW_KEYS.map((row, i) => {
+          const active = isRowActive(phases, row)
+          return (
+            <div key={row} style={i < ROW_KEYS.length - 1 ? { borderBottom: '1px solid rgba(0,0,0,0.06)' } : {}} className="flex items-center justify-between py-3">
+              <span className="text-sm font-medium text-text">{ROW_LABELS[row]}</span>
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleNotifyPhase(phase, 'phase_open')}
+                  onClick={() => handleToggle(row)}
+                  disabled={isPending}
+                  style={active ? { background: '#2DAA5E', color: '#fff', border: '1px solid #2DAA5E' } : { background: 'none', border: '1px solid rgba(0,0,0,0.15)', color: '#7A8E9B' }}
+                  className="px-4 py-1.5 rounded-full text-sm font-semibold transition-all disabled:opacity-50"
+                >
+                  {active ? '✓ Active' : 'Disabled'}
+                </button>
+                {active && (
+                  <button
+                    onClick={() => handleNotifyPhase(row, 'phase_open')}
+                    disabled={isPending}
+                    style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 hover:border-gold hover:text-gold"
+                  >
+                    📧 Open
+                  </button>
+                )}
+                <button
+                  onClick={() => handleNotifyPhase(row, 'phase_close')}
                   disabled={isPending}
                   style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
                   className="px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 hover:border-gold hover:text-gold"
                 >
-                  📧 Open
+                  🔒 Close
                 </button>
-              )}
-              <button
-                onClick={() => handleNotifyPhase(phase, 'phase_close')}
-                disabled={isPending}
-                style={{ background: '#ECE6DC', border: '1px solid rgba(0,0,0,0.1)', color: '#5A6E7B' }}
-                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all disabled:opacity-50 hover:border-gold hover:text-gold"
-              >
-                🔒 Close
-              </button>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <h2 style={{ borderBottom: '1px solid rgba(0,0,0,0.08)' }} className="font-bebas text-2xl tracking-widest text-gold mb-4 pb-2">

@@ -3,10 +3,25 @@ import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/email-send'
 import { welcomeEmail } from '@/lib/email-templates'
 
+// Restrict `next` to local relative paths so a crafted magic-link can't bounce
+// the user to attacker.com after authentication. Rejects: protocol-relative
+// (`//host`), absolute URLs (`https://host`), userinfo tricks (`@host`),
+// backslash variants, and anything that doesn't start with `/`.
+function safeNextPath(raw: string | null): string {
+  const fallback = '/dashboard'
+  if (!raw) return fallback
+  if (!raw.startsWith('/')) return fallback
+  if (raw.startsWith('//') || raw.startsWith('/\\')) return fallback
+  if (/[\r\n]/.test(raw)) return fallback
+  // Disallow embedded scheme/userinfo even when prefixed by `/`
+  if (raw.includes('://') || raw.includes('@')) return fallback
+  return raw
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  const next = safeNextPath(searchParams.get('next'))
   const errDesc = searchParams.get('error_description')
 
   if (errDesc) {

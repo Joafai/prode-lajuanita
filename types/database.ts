@@ -104,6 +104,20 @@ export interface Database {
         }
         Relationships: []
       }
+      admin_login_attempts: {
+        Row: {
+          user_id: string
+          attempted_at: string
+        }
+        Insert: {
+          user_id: string
+          attempted_at?: string
+        }
+        Update: {
+          attempted_at?: string
+        }
+        Relationships: []
+      }
       picks: {
         Row: {
           id: string

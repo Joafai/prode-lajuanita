@@ -13,7 +13,7 @@ export default async function DashboardPage() {
   const { data: leaderboard } = await supabase.rpc('get_leaderboard')
   const ranking = leaderboard ?? []
   const myStats = ranking.find((r) => r.user_id === user.id)
-  const ranks = denseRank(ranking.map((r) => ({ total_pts: Number(r.total_pts) })))
+  const ranks = denseRank(ranking.map((r) => ({ total_pts: Number(r.total_pts), exact_count: Number(r.exact_count) })))
   const myIndex = ranking.findIndex((r) => r.user_id === user.id)
   const myRank = myIndex >= 0 ? ranks[myIndex] : null
 

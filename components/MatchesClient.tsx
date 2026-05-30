@@ -23,11 +23,50 @@ type ScoreMap = Record<string, { home: string; away: string }>
 // Only enabled when NEXT_PUBLIC_SIMULATION_MODE=true — production stays strict.
 const SIMULATION_MODE = process.env.NEXT_PUBLIC_SIMULATION_MODE === 'true'
 
+// Third Place and Final are played as a single block (within 1-2 days of each
+// other in real tournaments). The UI shows ONE tab "Final" that includes both
+// — clicking it surfaces both matches. The DB still tracks them as separate
+// phases (`tercero` and `final`) for the rest of the system (emails, podium,
+// tournament_end logic).
+const TAB_PHASES: Phase[] = ['grupos', 'dieciseisavos', 'octavos', 'cuartos', 'semis', 'final']
+
+function matchesInTab(matches: Match[], tab: Phase): Match[] {
+  if (tab === 'final') return matches.filter((m) => m.phase === 'tercero' || m.phase === 'final')
+  return matches.filter((m) => m.phase === tab)
+}
+
+function isTabActive(phaseMap: Record<string, boolean>, tab: Phase): boolean {
+  if (tab === 'final') return !!phaseMap['tercero'] || !!phaseMap['final']
+  return !!phaseMap[tab]
+}
+
+type TabStatus = 'open' | 'not_yet' | 'closed'
+
+// Phase status uses match results as the source of truth (not `activated_at`,
+// which isn't reliably set when phases are seeded as active). A tab is:
+//   - 'open'    → at least one of its phases is currently is_active
+//   - 'closed'  → not active AND every match has a real result
+//   - 'not_yet' → not active AND no real results yet
+function tabStatus(activePhases: ActivePhase[], matches: Match[], tab: Phase): TabStatus {
+  const phases: Phase[] = tab === 'final' ? ['tercero', 'final'] : [tab]
+  const rows = phases
+    .map((p) => activePhases.find((a) => a.phase === p))
+    .filter((r): r is ActivePhase => !!r)
+  if (rows.some((r) => r.is_active)) return 'open'
+  const tabMatches = matches.filter((m) => phases.includes(m.phase as Phase))
+  if (tabMatches.length && tabMatches.every((m) => m.home_score !== null && m.away_score !== null)) {
+    return 'closed'
+  }
+  return 'not_yet'
+}
+
 export default function MatchesClient({ initialMatches, initialPicks, activePhases }: Props) {
   const phaseMap = Object.fromEntries(activePhases.map((p) => [p.phase, p.is_active]))
-  const firstActive = PHASE_ORDER.find((p) => phaseMap[p]) ?? 'grupos'
+  // If only `tercero` is active (final not yet), map firstActive to 'final' tab
+  // so the user lands on the combined view.
+  const firstActive: Phase = (TAB_PHASES.find((p) => isTabActive(phaseMap, p)) ?? 'grupos') as Phase
 
-  const [currentPhase, setCurrentPhase] = useState<Phase>(firstActive as Phase)
+  const [currentPhase, setCurrentPhase] = useState<Phase>(firstActive)
   const [scores, setScores] = useState<ScoreMap>(() => {
     const m: ScoreMap = {}
     initialPicks.forEach((p) => {
@@ -54,7 +93,7 @@ export default function MatchesClient({ initialMatches, initialPicks, activePhas
   }
 
   function handleSave() {
-    const phaseMatches = initialMatches.filter((m) => m.phase === currentPhase)
+    const phaseMatches = matchesInTab(initialMatches, currentPhase)
     const toSave = phaseMatches
       .filter((m) => {
         const s = scores[m.id]
@@ -84,14 +123,21 @@ export default function MatchesClient({ initialMatches, initialPicks, activePhas
     })
   }
 
-  const phaseMatches = initialMatches.filter((m) => m.phase === currentPhase)
+  const phaseMatches = matchesInTab(initialMatches, currentPhase)
   const filledInPhase = phaseMatches.filter((m) => {
     const s = scores[m.id]
     return s && s.home !== '' && s.away !== ''
   }).length
 
+  // For the combined "Final" tab, group by phase so the user sees Third Place
+  // and Final as separate sections.
   const groupedMatches = phaseMatches.reduce<Record<string, Match[]>>((acc, m) => {
-    const key = m.group_name ?? 'Matches'
+    let key: string
+    if (currentPhase === 'final') {
+      key = m.phase === 'tercero' ? 'Third Place' : 'Final'
+    } else {
+      key = m.group_name ?? 'Matches'
+    }
     if (!acc[key]) acc[key] = []
     acc[key].push(m)
     return acc
@@ -100,15 +146,18 @@ export default function MatchesClient({ initialMatches, initialPicks, activePhas
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 pb-28 relative z-10">
       {/* Phase tabs */}
-      <div className="flex gap-1.5 overflow-x-auto mb-6 -mx-4 sm:-mx-6 px-4 sm:px-6 pb-1 scrollbar-thin">
-        {PHASE_ORDER.map((phase) => {
+      <div className="flex gap-1.5 overflow-x-auto mb-6 pb-1 scrollbar-thin justify-center">
+        {TAB_PHASES.map((phase) => {
           const active = phase === currentPhase
-          const locked = !phaseMap[phase]
+          const status = tabStatus(activePhases, initialMatches, phase)
+          const locked = status !== 'open'
+          const label = phase === 'final' ? 'Finals' : PHASE_LABELS[phase]
           return (
             <button
               key={phase}
               onClick={() => {
-                if (locked) { showToast('This stage is not available yet'); return }
+                if (status === 'not_yet') { showToast('This stage is not available yet'); return }
+                if (status === 'closed') { showToast('This stage is not available anymore'); return }
                 setCurrentPhase(phase as Phase)
               }}
               style={
@@ -118,7 +167,7 @@ export default function MatchesClient({ initialMatches, initialPicks, activePhas
               }
               className="shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
             >
-              {PHASE_LABELS[phase as Phase]}
+              {label}
             </button>
           )
         })}
@@ -141,7 +190,7 @@ export default function MatchesClient({ initialMatches, initialPicks, activePhas
       {/* Match cards */}
       {Object.entries(groupedMatches).map(([groupName, matches]) => (
         <div key={groupName}>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted mt-5 mb-2 pl-1">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted mt-5 mb-2 text-center">
             {translateGroupName(groupName)}
           </div>
           {matches.map((match) => (

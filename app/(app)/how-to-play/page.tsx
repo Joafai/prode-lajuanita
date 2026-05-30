@@ -102,18 +102,18 @@ export default function HowToPlayPage() {
       {/* ── Tiebreakers ─────────────────────────────────────────────────────── */}
       <Section title="Tiebreakers between participants">
         <p className="text-sm text-text leading-relaxed mb-3">
-          Position depends <strong>only on total points</strong>. Submitting more predictions doesn&apos;t move you up — only correct picks do.
+          Position is decided by <strong>total points</strong>. If two participants finish on the same points, the tiebreaker is whoever predicted the <strong>most exact scores</strong> — they get the higher position.
         </p>
         <p className="text-sm text-text leading-relaxed mb-3">
-          If two or more participants are tied on total points, <strong>they share the same position</strong>. Example:
+          Example: Carlos and Jaqueline both finish with 20 pts, but Carlos has 4 exact scores and Jaqueline has 3 — Carlos takes 1st, Jaqueline 2nd.
         </p>
-        <pre className="text-xs sm:text-sm font-mono bg-s2 rounded-lg px-4 py-3 mb-3 text-text leading-relaxed">{`1   Carlos      20 pts
-1   Jaqueline   20 pts
-2   Miriam      19 pts
-3   Tony        18 pts
-3   Rachel      18 pts`}</pre>
+        <pre className="text-xs sm:text-sm font-mono bg-s2 rounded-lg px-4 py-3 mb-3 text-text leading-relaxed">{`1   Carlos      20 pts  (4 exact)
+2   Jaqueline   20 pts  (3 exact)
+3   Miriam      19 pts
+4   Tony        18 pts
+4   Rachel      18 pts  (both 2 exact)`}</pre>
         <p className="text-sm text-text leading-relaxed">
-          If a tie is at a prize position when a stage closes, the tiebreaker is whoever predicted the <strong>most exact scores</strong>. If the tie still persists, the winner is determined through a <strong>random draw</strong> among the tied participants.
+          If both total points <strong>and</strong> exact-score counts are identical, the tied participants share the position. At a prize position, ties that survive both checks are resolved by a <strong>random draw</strong>.
         </p>
         <p className="text-xs text-muted2 leading-relaxed mt-3">
           Until anyone has scored any points, the leaderboard is shown alphabetically by name with no position numbers.

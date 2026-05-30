@@ -243,12 +243,18 @@ export async function POST() {
   return NextResponse.json(result)
 }
 
-// GET — Vercel cron (every 12h, Vercel passes Authorization: Bearer CRON_SECRET)
+// GET — Vercel cron (every 12h, Vercel passes Authorization: Bearer CRON_SECRET).
+// Fail-closed: if CRON_SECRET is missing the endpoint is disabled entirely.
+// Previously the check was guarded with `if (cronSecret && ...)`, which meant
+// an unset secret left the endpoint open to anyone on the internet.
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+  }
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
