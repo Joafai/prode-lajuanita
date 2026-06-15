@@ -9,7 +9,11 @@ const TOURNAMENT_END   = new Date('2026-07-20T23:59:59Z')
 
 // Maps football-data.org stage codes → our phase IDs
 const STAGE_TO_PHASE: Record<string, string> = {
+  // football-data.org returns LAST_32 / LAST_16 for the WC round of 32 / 16.
+  // ROUND_OF_* kept as aliases in case the API ever switches codes.
+  LAST_32:       'dieciseisavos',
   ROUND_OF_32:   'dieciseisavos',
+  LAST_16:       'octavos',
   ROUND_OF_16:   'octavos',
   QUARTER_FINALS: 'cuartos',
   SEMI_FINALS:   'semis',
@@ -20,9 +24,11 @@ const STAGE_TO_PHASE: Record<string, string> = {
 // Maps football-data.org team names → our DB names
 const TEAM_NAME_MAP: Record<string, string> = {
   'Mexico': 'Mexico', 'South Korea': 'South Korea', 'South Africa': 'South Africa',
-  'Czech Republic': 'Czech Republic', 'Canada': 'Canada', 'Switzerland': 'Switzerland',
+  'Czech Republic': 'Czech Republic', 'Czechia': 'Czech Republic',
+  'Canada': 'Canada', 'Switzerland': 'Switzerland',
   'Qatar': 'Qatar', 'Bosnia and Herzegovina': 'Bosnia & Herzegovina',
-  'Bosnia & Herzegovina': 'Bosnia & Herzegovina', 'Brazil': 'Brazil',
+  'Bosnia & Herzegovina': 'Bosnia & Herzegovina', 'Bosnia-Herzegovina': 'Bosnia & Herzegovina',
+  'Brazil': 'Brazil',
   'Morocco': 'Morocco', 'Haiti': 'Haiti', 'Scotland': 'Scotland',
   'United States': 'USA', 'USA': 'USA', 'Australia': 'Australia',
   'Paraguay': 'Paraguay', 'Turkey': 'Turkey', 'Germany': 'Germany',
@@ -32,11 +38,12 @@ const TEAM_NAME_MAP: Record<string, string> = {
   'Sweden': 'Sweden', 'Tunisia': 'Tunisia', 'Belgium': 'Belgium',
   'Iran': 'Iran', 'IR Iran': 'Iran', 'Egypt': 'Egypt',
   'New Zealand': 'New Zealand', 'Spain': 'Spain', 'Uruguay': 'Uruguay',
-  'Saudi Arabia': 'Saudi Arabia', 'Cape Verde': 'Cape Verde', 'France': 'France',
+  'Saudi Arabia': 'Saudi Arabia', 'Cape Verde': 'Cape Verde',
+  'Cape Verde Islands': 'Cape Verde', 'France': 'France',
   'Senegal': 'Senegal', 'Norway': 'Norway', 'Iraq': 'Iraq',
   'Argentina': 'Argentina', 'Austria': 'Austria', 'Algeria': 'Algeria',
   'Jordan': 'Jordan', 'Portugal': 'Portugal', 'Colombia': 'Colombia',
-  'Uzbekistan': 'Uzbekistan', 'DR Congo': 'DR Congo',
+  'Uzbekistan': 'Uzbekistan', 'DR Congo': 'DR Congo', 'Congo DR': 'DR Congo',
   'Democratic Republic of Congo': 'DR Congo', 'England': 'England',
   'Croatia': 'Croatia', 'Panama': 'Panama', 'Ghana': 'Ghana',
 }

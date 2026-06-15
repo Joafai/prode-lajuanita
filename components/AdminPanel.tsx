@@ -81,8 +81,12 @@ export default function AdminPanel({ matches, activePhases, isAdmin: initialIsAd
       const data = await res.json()
       if (data.error) {
         showToast('Sync error: ' + data.error)
+      } else if (data.skipped) {
+        showToast(`Sync skipped: ${data.reason}`)
       } else {
-        showToast(`✓ ${data.updated} results synced from API`)
+        showToast(
+          `✓ ${data.scoresUpdated} scores, ${data.teamsUpdated} teams, ${data.phasesActivated} phases synced`
+        )
       }
     })
   }
