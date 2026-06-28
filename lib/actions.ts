@@ -3,13 +3,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { timingSafeEqual } from 'node:crypto'
-import { PHASE_ORDER, type Phase } from '@/lib/matches-data'
+import { PHASE_ORDER, isMatchLocked, type Phase } from '@/lib/matches-data'
 
 const MAX_TEAM_NAME_LEN = 60
-
-// Server-side mirror of the client's match-lock window: picks lock 1h before
-// kickoff. Kept in sync with `isMatchLocked` in lib/matches-data.ts.
-const PICK_LOCK_MS = 60 * 60 * 1000
 
 function sanitizeScore(raw: unknown): number | null {
   const n = Math.floor(Number(raw))
@@ -52,7 +48,6 @@ export async function savePicks(
 
   const matchById = new Map((matches ?? []).map((m) => [m.id, m]))
   const activePhases = new Set((activeRows ?? []).map((p) => p.phase))
-  const now = Date.now()
 
   const validRows: {
     user_id: string
@@ -68,12 +63,10 @@ export async function savePicks(
     if (!activePhases.has(m.phase)) continue
     // Match with a real result is locked forever — no late edits.
     if (m.home_score !== null) continue
-    // 1h pre-kickoff lock (skipped in simulation mode where match_date is
-    // historical and would always be "in the past").
-    if (!simulationMode && m.match_date) {
-      const msUntil = new Date(m.match_date).getTime() - now
-      if (msUntil < PICK_LOCK_MS) continue
-    }
+    // Picks lock at kickoff, except matches in the open-pick override (which stay
+    // editable until the match ends). Same rule the client uses. Skipped in
+    // simulation mode where match_date is historical (always "in the past").
+    if (!simulationMode && isMatchLocked(m.id, m.match_date)) continue
     const home = sanitizeScore(p.homeScore)
     const away = sanitizeScore(p.awayScore)
     if (home === null || away === null) continue

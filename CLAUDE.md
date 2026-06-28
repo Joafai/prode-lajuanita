@@ -73,7 +73,9 @@ Team names were originally Spanish (migration `001`) and migration `003_english_
 
 ### Match-locking convention
 
-`isMatchLocked(matchDate)` in `lib/matches-data.ts` returns true within **1h before kickoff**. Both client and server enforce this: the client disables the inputs, and `savePicks` (`lib/actions.ts`) re-validates `active_phases.is_active`, `match.home_score IS NULL`, and the 1h pre-kickoff window before writing. Picks that fail the server check are silently dropped from the upsert and reported back as `rejected` in the action's return value. `SIMULATION_MODE=true` (server env) skips the 1h check so the local E2E flow can still poke picks against historical kickoffs.
+`isMatchLocked(matchId, matchDate)` in `lib/matches-data.ts` returns true once **kickoff has passed** (you can edit right up until the match starts). Both client and server enforce this: the client disables the inputs, and `savePicks` (`lib/actions.ts`) re-validates `active_phases.is_active`, `match.home_score IS NULL`, and the kickoff lock before writing. Picks that fail the server check are silently dropped from the upsert and reported back as `rejected` in the action's return value. `SIMULATION_MODE=true` (server env) skips the kickoff check so the local E2E flow can still poke picks against historical kickoffs.
+
+**Open-pick override:** match ids listed in `NEXT_PUBLIC_OPEN_PICK_MATCH_IDS` (comma-separated, e.g. `16_1`) stay editable **until the match ends** (~3h after kickoff, `MATCH_LOCK_AFTER_KICKOFF_MS`) instead of locking at kickoff — used to re-open a single in-progress match. The var is `NEXT_PUBLIC_` so client and server read the same value. A loaded result (`home_score`) still locks the match, so leaving the flag set after the game is harmless.
 
 ### sync-results cron
 
@@ -87,3 +89,4 @@ Team names were originally Spanish (migration `001`) and migration `003_english_
 - `CRON_SECRET` — sync-results GET handler
 - `SMTP_USER`, `SMTP_PASS`, `NEXT_PUBLIC_APP_URL` — notify route (Nodemailer). Optional overrides: `SMTP_HOST` (default `smtp.gmail.com`), `SMTP_PORT` (default `465`), `SMTP_SECURE` (default `true`), `SMTP_FROM` (default `Prode La Juanita <SMTP_USER>`). For Gmail, `SMTP_PASS` must be an app password (not your account password) with 2FA enabled.
 - `ADMIN_PASSWORD` — `lib/actions.ts:135` (default `juanita2026` if unset; the default is shown to users in the admin login UI, so override it in production)
+- `NEXT_PUBLIC_OPEN_PICK_MATCH_IDS` — *optional*, comma-separated match ids (e.g. `16_1`) whose picks stay open until the match ends instead of locking at kickoff (see Match-locking convention).

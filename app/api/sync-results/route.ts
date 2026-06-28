@@ -90,28 +90,51 @@ async function runSync() {
 
     const { data: dbMatches } = await supabase.from('matches').select('*')
 
-    // ── STEP 1: Update TBD team names for knockout matches ────────────────────
+    // ── STEP 1: Assign / correct knockout matchups from the API ───────────────
+    // The API is the source of truth for who plays whom. We pair its knockout
+    // matches to our DB slots ONE-TO-ONE per phase, by nearest kickoff, so two
+    // slots scheduled close together (e.g. the round-of-32 games an hour apart)
+    // can't both grab the same teams — the old code matched the *first* slot
+    // within a 2h window, which produced wrong/duplicated matchups. We also
+    // re-correct slots that were already filled wrong (not just TBD ones), but
+    // never touch a match whose result is already loaded (don't rewrite a
+    // played/in-progress match's identity out from under existing picks).
+    const apiByPhase = new Map<string, { home: string; away: string; date: number }[]>()
     for (const apiMatch of apiMatches) {
       const phase = STAGE_TO_PHASE[apiMatch.stage]
       if (!phase) continue
       if (!apiMatch.homeTeam?.name || !apiMatch.awayTeam?.name) continue
-
-      const homeTeam = normalize(apiMatch.homeTeam.name)
-      const awayTeam = normalize(apiMatch.awayTeam.name)
-      const apiDate = new Date(apiMatch.utcDate)
-
-      // Find our DB match by phase + date (within 2h window)
-      const dbMatch = dbMatches?.find((m) => {
-        if (m.phase !== phase || !m.match_date) return false
-        const diff = Math.abs(new Date(m.match_date).getTime() - apiDate.getTime())
-        return diff < 2 * 60 * 60 * 1000
+      if (!apiByPhase.has(phase)) apiByPhase.set(phase, [])
+      apiByPhase.get(phase)!.push({
+        home: normalize(apiMatch.homeTeam.name),
+        away: normalize(apiMatch.awayTeam.name),
+        date: new Date(apiMatch.utcDate).getTime(),
       })
+    }
 
-      if (dbMatch && (dbMatch.home_team.startsWith('TBD') || dbMatch.away_team.startsWith('TBD'))) {
-        await supabase.from('matches').update({ home_team: homeTeam, away_team: awayTeam }).eq('id', dbMatch.id)
-        dbMatch.home_team = homeTeam
-        dbMatch.away_team = awayTeam
-        teamsUpdated++
+    for (const [phase, apiList] of apiByPhase) {
+      // Candidate slots: this phase, with a date, and no result yet.
+      const slots = (dbMatches ?? []).filter(
+        (m) => m.phase === phase && m.match_date && m.home_score === null
+      )
+      const usedSlotIds = new Set<string>()
+      // Assign earliest API match first to its nearest free slot by kickoff.
+      for (const api of [...apiList].sort((a, b) => a.date - b.date)) {
+        let best: (typeof slots)[number] | null = null
+        let bestDiff = Infinity
+        for (const slot of slots) {
+          if (usedSlotIds.has(slot.id)) continue
+          const diff = Math.abs(new Date(slot.match_date!).getTime() - api.date)
+          if (diff < bestDiff) { bestDiff = diff; best = slot }
+        }
+        if (!best) break // no free slots left for this phase
+        usedSlotIds.add(best.id)
+        if (best.home_team !== api.home || best.away_team !== api.away) {
+          await supabase.from('matches').update({ home_team: api.home, away_team: api.away }).eq('id', best.id)
+          best.home_team = api.home
+          best.away_team = api.away
+          teamsUpdated++
+        }
       }
     }
 

@@ -93,10 +93,32 @@ export function getFlag(team: string): string {
   return FLAGS[team] ?? '🏳️'
 }
 
-// Picks lock 1 hour before kickoff. Mirror in lib/scoring.ts if you change this.
-export function isMatchLocked(matchDate: string | null | undefined): boolean {
+// How long after kickoff a match in the "open" override stays editable: ~3h,
+// covering 90' + extra time + penalties. After that it's treated as finished.
+export const MATCH_LOCK_AFTER_KICKOFF_MS = 3 * 60 * 60 * 1000
+
+// Match ids whose picks stay open until the match ENDS instead of locking at
+// kickoff — set via NEXT_PUBLIC_OPEN_PICK_MATCH_IDS (comma-separated, e.g.
+// "16_1,16_2"). Use it to re-open a single in-progress match (e.g. when its
+// matchup was wrong at kickoff). Readable on client AND server thanks to the
+// NEXT_PUBLIC_ prefix, so the lock stays consistent on both sides. Once a match
+// has a result (or 3h pass) it locks regardless, so the flag is safe to leave on.
+export function openPickMatchIds(): Set<string> {
+  const raw = process.env.NEXT_PUBLIC_OPEN_PICK_MATCH_IDS ?? ''
+  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))
+}
+
+// Default: picks lock at kickoff (you can edit right up until the match starts).
+// Exception: ids in the open-pick override stay editable until the match is over
+// (~3h after kickoff). A loaded result locks the match either way — the caller
+// checks home_score. Mirrored server-side in lib/actions.ts (savePicks).
+export function isMatchLocked(matchId: string, matchDate: string | null | undefined): boolean {
   if (!matchDate) return false
-  return new Date(matchDate).getTime() - Date.now() < 60 * 60 * 1000
+  const kickoff = new Date(matchDate).getTime()
+  if (openPickMatchIds().has(matchId)) {
+    return Date.now() - kickoff > MATCH_LOCK_AFTER_KICKOFF_MS
+  }
+  return Date.now() >= kickoff
 }
 
 // Formats a match date as Miami time (America/New_York). Used in /matches when

@@ -18,9 +18,10 @@ interface Props {
 
 type ScoreMap = Record<string, { home: string; away: string }>
 
-// When true, individual match locks (12h-pre-kickoff guard + "has real result")
-// are bypassed so test users can edit picks freely while a phase is active.
-// Only enabled when NEXT_PUBLIC_SIMULATION_MODE=true — production stays strict.
+// When true, individual match locks (the kickoff guard + "has real result") are
+// bypassed so test users can edit picks freely while a phase is active. Only
+// enabled when NEXT_PUBLIC_SIMULATION_MODE=true — production stays strict (picks
+// lock at kickoff, except matches in the open-pick override).
 const SIMULATION_MODE = process.env.NEXT_PUBLIC_SIMULATION_MODE === 'true'
 
 // Third Place and Final are played as a single block (within 1-2 days of each
@@ -100,9 +101,9 @@ export default function MatchesClient({ initialMatches, initialPicks, activePhas
         if (!s || s.home === '' || s.away === '') return false
         // Match with a real result is always locked — pick can't change after the match.
         if (m.home_score !== null) return false
-        // 1h-pre-kickoff lock only applies in production; in SIMULATION_MODE we don't
+        // Kickoff lock only applies in production; in SIMULATION_MODE we don't
         // have real kickoff times to test against.
-        if (!SIMULATION_MODE && isMatchLocked(m.match_date)) return false
+        if (!SIMULATION_MODE && isMatchLocked(m.id, m.match_date)) return false
         return true
       })
       .map((m) => ({
@@ -255,8 +256,8 @@ function MatchCard({
   const hasPick = pick !== undefined
   // A match is locked when:
   //   - it already has a real result (always, regardless of mode), or
-  //   - in production, it's within the 1h-pre-kickoff window.
-  const locked = hasResult || (!SIMULATION_MODE && isMatchLocked(match.match_date))
+  //   - in production, kickoff has passed (unless it's in the open-pick override).
+  const locked = hasResult || (!SIMULATION_MODE && isMatchLocked(match.id, match.match_date))
 
   let cardStyle: React.CSSProperties = { background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)' }
   let ptsEl: React.ReactNode = null
