@@ -79,7 +79,7 @@ Team names were originally Spanish (migration `001`) and migration `003_english_
 
 ### sync-results cron
 
-`GET /api/sync-results` is a Vercel cron endpoint authenticated by `Authorization: Bearer ${CRON_SECRET}`. Same handler runs from the admin panel via `POST` (RLS-checked for `is_admin`). It (1) renames TBD knockouts by matching phase + kickoff time within a 2h window, (2) writes scores for FINISHED matches by matching team-name pair where `home_score IS NULL`, (3) auto-activates a phase 48h before its first match. The `TOURNAMENT_START`/`TOURNAMENT_END` constants short-circuit the job outside that window.
+`GET /api/sync-results` is a Vercel cron endpoint (every 2h, see `vercel.json`) authenticated by `Authorization: Bearer ${CRON_SECRET}`. Same handler runs from the admin panel via `POST` (RLS-checked for `is_admin`). It (1) assigns/corrects knockout matchups from the API, pairing each API match to a DB slot **one-to-one by nearest kickoff** per phase (so two slots scheduled close together can't grab the same teams); it re-corrects slots already filled wrong, but never touches a match whose result is already loaded — and slots stay TBD until the API actually has real team names for that round, (2) writes scores for FINISHED matches by matching team-name pair where `home_score IS NULL`, (3) auto-activates a phase 48h before its first match (only once all its teams are known, i.e. no TBDs). The `TOURNAMENT_START`/`TOURNAMENT_END` constants short-circuit the job outside that window.
 
 ## Required environment variables
 
