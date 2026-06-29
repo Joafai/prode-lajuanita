@@ -113,9 +113,14 @@ async function runSync() {
     }
 
     for (const [phase, apiList] of apiByPhase) {
-      // Candidate slots: this phase, with a date, and no result yet.
+      // Candidate slots: EVERY slot of this phase with a date — including ones
+      // that already have a result. A finished match (e.g. round-of-32 game
+      // already played) must still claim its own slot by nearest kickoff;
+      // otherwise the API keeps returning it and it gets re-assigned to a
+      // neighbouring free slot, duplicating that matchup and shifting the whole
+      // bracket. We just don't WRITE to resulted slots — their teams are locked.
       const slots = (dbMatches ?? []).filter(
-        (m) => m.phase === phase && m.match_date && m.home_score === null
+        (m) => m.phase === phase && m.match_date
       )
       const usedSlotIds = new Set<string>()
       // Assign earliest API match first to its nearest free slot by kickoff.
@@ -129,7 +134,8 @@ async function runSync() {
         }
         if (!best) break // no free slots left for this phase
         usedSlotIds.add(best.id)
-        if (best.home_team !== api.home || best.away_team !== api.away) {
+        // Only write to slots without a result; a played match keeps its teams.
+        if (best.home_score === null && (best.home_team !== api.home || best.away_team !== api.away)) {
           await supabase.from('matches').update({ home_team: api.home, away_team: api.away }).eq('id', best.id)
           best.home_team = api.home
           best.away_team = api.away
